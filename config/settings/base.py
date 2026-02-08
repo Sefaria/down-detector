@@ -116,7 +116,7 @@ MONITORED_SERVICES = [
         "name": "sefaria.org",
         "url": env("SEFARIA_HEALTH_URL", default="https://www.sefaria.org/healthz"),
         "method": "GET",
-        "expected_status": 302,
+        "expected_status": 200,
         "timeout": 10,
     },
     {
@@ -129,7 +129,7 @@ MONITORED_SERVICES = [
     },
     {
         "name": "MCP Server",
-        "url": env("MCP_HEALTH_URL", default="https://developers.sefaria.org/healthz"),
+        "url": env("MCP_HEALTH_URL", default="https://mcp.sefaria.org/sse"),
         "method": "GET",
         "expected_status": 200,
         "timeout": 5,
