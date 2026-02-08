@@ -12,6 +12,7 @@ from django.conf import settings
 
 from monitoring.services.checker import check_all_services
 from monitoring.services.state import get_state_tracker
+from monitoring.services.alerter import process_transitions_with_alerts
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +28,7 @@ def run_health_check_cycle():
     1. Checks all configured services
     2. Persists results to the database
     3. Processes state transitions
-    4. Triggers alerts for any transitions (TODO: Phase 2)
+    4. Sends Slack alerts for any transitions
     """
     logger.info("Starting health check cycle...")
     
@@ -39,18 +40,10 @@ def run_health_check_cycle():
         tracker = get_state_tracker()
         transitions = tracker.process_results(results)
         
-        # Log transitions (alerts will be added in Phase 2)
-        for result, transition in transitions:
-            if transition == "went_down":
-                logger.warning(
-                    f"ALERT: {result.service_name} went DOWN "
-                    f"(status_code={result.status_code}, error={result.error_message})"
-                )
-            elif transition == "recovered":
-                logger.info(
-                    f"RECOVERY: {result.service_name} is back UP "
-                    f"(response_time={result.response_time_ms}ms)"
-                )
+        # Send Slack alerts for transitions
+        if transitions:
+            alerts_sent = process_transitions_with_alerts(transitions)
+            logger.info(f"Sent {alerts_sent} Slack alerts")
         
         # Summary log
         up_count = sum(1 for r in results if r.is_up)
