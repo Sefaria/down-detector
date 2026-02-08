@@ -1,6 +1,11 @@
 /* Sefaria Status Page Styles */
 
 :root {
+    /* Sefaria Brand Colors */
+    --sefaria-blue: #18345D;
+    --sefaria-gold: #CCB479;
+    --sefaria-light-blue: #2D4A7C;
+
     /* Status colors */
     --status-up: #10B981;
     --status-down: #EF4444;
@@ -28,7 +33,7 @@
 
 body {
     font-family: var(--font-family);
-    background: var(--bg-primary);
+    background: linear-gradient(135deg, var(--bg-primary) 0%, #1a2744 100%);
     color: var(--text-primary);
     line-height: 1.6;
     min-height: 100vh;
@@ -38,6 +43,9 @@ body {
     max-width: 800px;
     margin: 0 auto;
     padding: 2rem 1rem;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
 }
 
 /* Header */
@@ -46,56 +54,127 @@ header {
     margin-bottom: 2rem;
 }
 
+.logo-link {
+    display: inline-block;
+    margin-bottom: 0.75rem;
+}
+
+.logo {
+    height: 40px;
+    width: auto;
+    filter: brightness(0) invert(1);
+    opacity: 0.9;
+    transition: opacity 0.2s;
+}
+
+.logo:hover {
+    opacity: 1;
+}
+
 header h1 {
-    font-size: 2rem;
+    font-size: 1.75rem;
     font-weight: 700;
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.25rem;
+    color: var(--text-primary);
 }
 
 header .subtitle {
     color: var(--text-secondary);
-    font-size: 1rem;
+    font-size: 0.95rem;
 }
 
 /* Overall Status Banner */
 .overall-status {
     display: flex;
     align-items: center;
-    justify-content: center;
     gap: 1rem;
-    padding: 1.5rem;
+    padding: 1.25rem 1.5rem;
     border-radius: 12px;
     margin-bottom: 2rem;
-    font-size: 1.25rem;
-    font-weight: 600;
 }
 
 .overall-status.status-operational {
-    background: linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(16, 185, 129, 0.05));
-    border: 1px solid rgba(16, 185, 129, 0.3);
-    color: var(--status-up);
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(16, 185, 129, 0.04));
+    border: 1px solid rgba(16, 185, 129, 0.25);
 }
 
 .overall-status.status-partial {
-    background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(245, 158, 11, 0.05));
-    border: 1px solid rgba(245, 158, 11, 0.3);
-    color: var(--status-partial);
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(245, 158, 11, 0.04));
+    border: 1px solid rgba(245, 158, 11, 0.25);
 }
 
 .overall-status.status-major {
-    background: linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(239, 68, 68, 0.05));
-    border: 1px solid rgba(239, 68, 68, 0.3);
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.12), rgba(239, 68, 68, 0.04));
+    border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.status-indicator {
+    flex-shrink: 0;
+}
+
+.status-dot {
+    display: block;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--status-up);
+}
+
+.status-operational .status-dot {
+    background: var(--status-up);
+}
+
+.status-partial .status-dot {
+    background: var(--status-partial);
+}
+
+.status-major .status-dot {
+    background: var(--status-down);
+}
+
+.status-dot.pulse {
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+
+    0%,
+    100% {
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5);
+    }
+
+    50% {
+        box-shadow: 0 0 0 8px rgba(239, 68, 68, 0);
+    }
+}
+
+.status-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+}
+
+.status-text {
+    font-size: 1.15rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.status-operational .status-text {
+    color: var(--status-up);
+}
+
+.status-partial .status-text {
+    color: var(--status-partial);
+}
+
+.status-major .status-text {
     color: var(--status-down);
 }
 
-.status-icon {
-    width: 32px;
-    height: 32px;
-}
-
-.status-icon svg {
-    width: 100%;
-    height: 100%;
+.last-updated {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
 }
 
 /* Services Section */
@@ -104,8 +183,11 @@ header .subtitle {
 }
 
 .services h2 {
-    font-size: 1.25rem;
-    margin-bottom: 1rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.75rem;
     color: var(--text-secondary);
 }
 
@@ -122,14 +204,58 @@ header .subtitle {
     align-items: center;
     padding: 1rem 1.25rem;
     border-bottom: 1px solid var(--border-color);
+    transition: background 0.15s;
 }
 
 .service-item:last-child {
     border-bottom: none;
 }
 
+.service-item:hover {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.service-info {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.service-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.service-dot.status-up {
+    background: var(--status-up);
+}
+
+.service-dot.status-down {
+    background: var(--status-down);
+    animation: pulse-small 2s infinite;
+}
+
+.service-dot.status-unknown {
+    background: var(--status-unknown);
+}
+
+@keyframes pulse-small {
+
+    0%,
+    100% {
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+    }
+
+    50% {
+        box-shadow: 0 0 0 6px rgba(239, 68, 68, 0);
+    }
+}
+
 .service-name {
     font-weight: 500;
+    font-size: 0.95rem;
 }
 
 .service-status {
@@ -139,31 +265,39 @@ header .subtitle {
 }
 
 .status-badge {
-    padding: 0.25rem 0.75rem;
+    padding: 0.2rem 0.6rem;
     border-radius: 9999px;
-    font-size: 0.75rem;
+    font-size: 0.7rem;
     font-weight: 600;
     text-transform: uppercase;
+    letter-spacing: 0.02em;
 }
 
 .status-badge.status-up {
-    background: rgba(16, 185, 129, 0.15);
+    background: rgba(16, 185, 129, 0.12);
     color: var(--status-up);
 }
 
 .status-badge.status-down {
-    background: rgba(239, 68, 68, 0.15);
+    background: rgba(239, 68, 68, 0.12);
     color: var(--status-down);
 }
 
 .status-badge.status-unknown {
-    background: rgba(107, 114, 128, 0.15);
+    background: rgba(107, 114, 128, 0.12);
     color: var(--status-unknown);
 }
 
 .response-time {
     color: var(--text-secondary);
-    font-size: 0.875rem;
+    font-size: 0.8rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.error-hint {
+    color: var(--status-down);
+    cursor: help;
+    font-size: 0.85rem;
 }
 
 /* Incidents */
@@ -172,8 +306,11 @@ header .subtitle {
 }
 
 .incidents h2 {
-    font-size: 1.25rem;
-    margin-bottom: 1rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.75rem;
     color: var(--text-secondary);
 }
 
@@ -181,7 +318,7 @@ header .subtitle {
     background: var(--bg-secondary);
     border-radius: 8px;
     padding: 1rem 1.25rem;
-    margin-bottom: 0.75rem;
+    margin-bottom: 0.5rem;
     border: 1px solid var(--border-color);
 }
 
@@ -193,36 +330,39 @@ header .subtitle {
 }
 
 .severity-badge {
-    padding: 0.25rem 0.5rem;
+    padding: 0.2rem 0.5rem;
     border-radius: 4px;
-    font-size: 0.75rem;
+    font-size: 0.65rem;
     font-weight: 600;
     text-transform: uppercase;
+    letter-spacing: 0.02em;
 }
 
 .severity-high .severity-badge {
-    background: rgba(239, 68, 68, 0.15);
+    background: rgba(239, 68, 68, 0.12);
     color: var(--status-down);
 }
 
 .severity-medium .severity-badge {
-    background: rgba(245, 158, 11, 0.15);
+    background: rgba(245, 158, 11, 0.12);
     color: var(--status-partial);
 }
 
 .severity-resolved .severity-badge,
 .severity-badge.resolved {
-    background: rgba(107, 114, 128, 0.15);
+    background: rgba(107, 114, 128, 0.12);
     color: var(--status-resolved);
 }
 
 .incident-header time {
     color: var(--text-secondary);
-    font-size: 0.875rem;
+    font-size: 0.8rem;
 }
 
 .incident-text {
     color: var(--text-primary);
+    font-size: 0.9rem;
+    line-height: 1.5;
 }
 
 .no-services {
@@ -233,10 +373,38 @@ header .subtitle {
 
 /* Footer */
 footer {
+    margin-top: auto;
     text-align: center;
     padding-top: 2rem;
+}
+
+.footer-links {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.footer-links a {
     color: var(--text-secondary);
-    font-size: 0.875rem;
+    text-decoration: none;
+    font-size: 0.85rem;
+    transition: color 0.15s;
+}
+
+.footer-links a:hover {
+    color: var(--sefaria-gold);
+}
+
+.footer-links .divider {
+    color: var(--border-color);
+}
+
+.copyright {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    opacity: 0.7;
 }
 
 /* Responsive */
@@ -251,6 +419,9 @@ footer {
 
     .overall-status {
         padding: 1rem;
+    }
+
+    .status-text {
         font-size: 1rem;
     }
 
@@ -258,5 +429,9 @@ footer {
         flex-direction: column;
         align-items: flex-start;
         gap: 0.5rem;
+    }
+
+    .service-status {
+        padding-left: 1.75rem;
     }
 }

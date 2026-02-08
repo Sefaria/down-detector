@@ -6,37 +6,48 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sefaria Status</title>
-    <meta name="description" content="Real-time status page for Sefaria services">
+    <meta name="description"
+        content="Real-time status page for Sefaria services - Check the operational status of sefaria.org and related services.">
+
+    <!-- Open Graph -->
+    <meta property="og:title" content="Sefaria Status">
+    <meta property="og:description" content="Real-time status of Sefaria services">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://status.sefaria.org">
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="https://www.sefaria.org/static/icons/favicon.ico">
+    <link rel="apple-touch-icon" href="https://www.sefaria.org/static/icons/apple-touch-icon.png">
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
     <link rel="stylesheet" href="{% static 'monitoring/style.css' %}">
 </head>
 
 <body>
     <div class="container">
+        <!-- Header with Logo -->
         <header>
+            <a href="https://www.sefaria.org" class="logo-link" target="_blank" rel="noopener">
+                <img src="https://www.sefaria.org/static/img/logo.svg" alt="Sefaria" class="logo"
+                    onerror="this.style.display='none'">
+            </a>
             <h1>Sefaria Status</h1>
             <p class="subtitle">Real-time service health monitoring</p>
         </header>
 
         <!-- Overall Status Banner -->
         <section class="overall-status status-{{ overall_status }}">
-            <div class="status-icon">
-                {% if overall_status == 'operational' %}
-                <svg class="icon-check" viewBox="0 0 24 24" fill="currentColor">
-                    <path
-                        d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
-                </svg>
-                {% elif overall_status == 'partial' %}
-                <svg class="icon-warning" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z" />
-                </svg>
-                {% else %}
-                <svg class="icon-error" viewBox="0 0 24 24" fill="currentColor">
-                    <path
-                        d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
-                </svg>
-                {% endif %}
+            <div class="status-indicator">
+                <span class="status-dot {% if overall_status != 'operational' %}pulse{% endif %}"></span>
             </div>
-            <span class="status-text">{{ status_label }}</span>
+            <div class="status-info">
+                <span class="status-text">{{ status_label }}</span>
+                <span class="last-updated">Last checked: <time id="last-checked">just now</time></span>
+            </div>
         </section>
 
         <!-- Service Status List -->
@@ -44,9 +55,12 @@
             <h2>Services</h2>
             <div class="service-list">
                 {% for service in services %}
-                <div class="service-item status-{{ service.status }}">
-                    <span class="service-name">{{ service.name }}</span>
-                    <span class="service-status">
+                <div class="service-item">
+                    <div class="service-info">
+                        <span class="service-dot status-{{ service.status }}"></span>
+                        <span class="service-name">{{ service.name }}</span>
+                    </div>
+                    <div class="service-status">
                         {% if service.status == 'up' %}
                         <span class="status-badge status-up">Operational</span>
                         {% if service.response_time_ms %}
@@ -54,10 +68,13 @@
                         {% endif %}
                         {% elif service.status == 'down' %}
                         <span class="status-badge status-down">Down</span>
+                        {% if service.error_message %}
+                        <span class="error-hint" title="{{ service.error_message }}">ⓘ</span>
+                        {% endif %}
                         {% else %}
                         <span class="status-badge status-unknown">Unknown</span>
                         {% endif %}
-                    </span>
+                    </div>
                 </div>
                 {% empty %}
                 <p class="no-services">No services configured.</p>
@@ -85,13 +102,12 @@
         <!-- Incident History -->
         {% if resolved_incidents %}
         <section class="incidents resolved-incidents">
-            <h2>Recent Incident History</h2>
+            <h2>Recent History</h2>
             {% for incident in resolved_incidents %}
             <div class="incident severity-resolved">
                 <div class="incident-header">
                     <span class="severity-badge resolved">Resolved</span>
-                    <time datetime="{{ incident.updated_at|date:'c' }}">{{ incident.updated_at|date:"M j, Y g:i A"
-                        }}</time>
+                    <time datetime="{{ incident.updated_at|date:'c' }}">{{ incident.updated_at|date:"M j, Y" }}</time>
                 </div>
                 <p class="incident-text">{{ incident.text }}</p>
             </div>
@@ -100,9 +116,33 @@
         {% endif %}
 
         <footer>
-            <p>&copy; Sefaria. Powered by our uptime monitoring system.</p>
+            <div class="footer-links">
+                <a href="https://www.sefaria.org" target="_blank" rel="noopener">Sefaria.org</a>
+                <span class="divider">·</span>
+                <a href="https://github.com/Sefaria" target="_blank" rel="noopener">GitHub</a>
+                <span class="divider">·</span>
+                <a href="https://help.sefaria.org" target="_blank" rel="noopener">Help Center</a>
+            </div>
+            <p class="copyright">&copy; Sefaria</p>
         </footer>
     </div>
+
+    <script>
+        // Update "last checked" time every 30 seconds
+        (function () {
+            const lastChecked = document.getElementById('last-checked');
+            let seconds = 0;
+            setInterval(function () {
+                seconds += 1;
+                if (seconds < 60) {
+                    lastChecked.textContent = seconds + 's ago';
+                } else {
+                    const mins = Math.floor(seconds / 60);
+                    lastChecked.textContent = mins + 'm ago';
+                }
+            }, 1000);
+        })();
+    </script>
 </body>
 
 </html>
