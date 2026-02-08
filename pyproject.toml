@@ -1,0 +1,60 @@
+[project]
+name = "sefaria-status"
+version = "1.0.0"
+description = "Uptime monitoring system for Sefaria services"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "Django>=5.2,<6.0",
+    "gunicorn>=23.0.0",
+    "psycopg[binary]>=3.2.0",
+    "dj-database-url>=2.3.0",
+    "django-environ>=0.12.0",
+    "whitenoise>=6.8.0",
+    "httpx>=0.28.0",
+    "tenacity>=9.0.0",
+    "APScheduler>=3.10.0",
+    "slack-sdk>=3.34.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-django>=4.9.0",
+    "pytest-cov>=6.0.0",
+    "pytest-mock>=3.14.0",
+    "factory-boy>=3.3.0",
+    "time-machine>=2.16.0",
+    "ruff>=0.8.0",
+    "pre-commit>=4.0.0",
+]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings.test"
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
+addopts = "--reuse-db --tb=short --strict-markers -v"
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests that hit external services",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+ignore = ["E501"]
+
+[tool.coverage.run]
+source = ["monitoring"]
+omit = ["*/migrations/*", "*/tests/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+]
