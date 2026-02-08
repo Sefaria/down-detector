@@ -116,7 +116,7 @@ MONITORED_SERVICES = [
         "name": "sefaria.org",
         "url": env("SEFARIA_HEALTH_URL", default="https://www.sefaria.org/healthz"),
         "method": "GET",
-        "expected_status": 200,
+        "expected_status": 302,
         "timeout": 10,
     },
     {

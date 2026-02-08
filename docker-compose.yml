@@ -1,0 +1,82 @@
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: sefaria_status
+      POSTGRES_USER: sefaria
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sefaria -d sefaria_status"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Django Web Application (Status Page)
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings.production
+      - SECRET_KEY=${SECRET_KEY}
+      - DEBUG=False
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-status.sefaria.org,localhost}
+      - DATABASE_URL=postgres://sefaria:${DB_PASSWORD:-changeme}@db:5432/sefaria_status
+      - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL}
+      - SLACK_CHANNEL=${SLACK_CHANNEL:-sefaria-down}
+      - STATUS_PAGE_URL=${STATUS_PAGE_URL:-https://status.sefaria.org}
+    depends_on:
+      db:
+        condition: service_healthy
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             gunicorn --bind 0.0.0.0:8000 --workers 2 --threads 2 config.wsgi:application"
+
+  # Health Check Scheduler (Background Service)
+  scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings.production
+      - SECRET_KEY=${SECRET_KEY}
+      - DEBUG=False
+      - DATABASE_URL=postgres://sefaria:${DB_PASSWORD:-changeme}@db:5432/sefaria_status
+      - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL}
+      - SLACK_CHANNEL=${SLACK_CHANNEL:-sefaria-down}
+      - STATUS_PAGE_URL=${STATUS_PAGE_URL:-https://status.sefaria.org}
+      - HEALTH_CHECK_INTERVAL=${HEALTH_CHECK_INTERVAL:-60}
+    depends_on:
+      db:
+        condition: service_healthy
+      web:
+        condition: service_started
+    command: python manage.py run_checks
+
+  # Retention Cleanup (Runs daily via cron-like schedule)
+  cleanup:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: "no"
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings.production
+      - SECRET_KEY=${SECRET_KEY}
+      - DATABASE_URL=postgres://sefaria:${DB_PASSWORD:-changeme}@db:5432/sefaria_status
+    depends_on:
+      db:
+        condition: service_healthy
+    command: python manage.py cleanup_old_checks
+    profiles:
+      - maintenance
+
+volumes:
+  postgres_data:
