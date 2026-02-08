@@ -113,10 +113,12 @@
                 <div class="incident-header">
                     <span class="severity-badge resolved">Resolved</span>
                     <div class="incident-times">
-                        <time datetime="{{ incident.created_at|date:'c' }}">Created: {{ incident.created_at|date:"M j, Y
-                            g:i A" }}</time>
-                        <time datetime="{{ incident.updated_at|date:'c' }}" class="updated-time">Resolved: {{
-                            incident.updated_at|date:"M j, Y g:i A" }}</time>
+                        <time datetime="{{ incident.created_at|date:'c' }}">
+                            Created: {{ incident.created_at|date:"M j, Y g:i A" }}
+                        </time>
+                        <time datetime="{{ incident.updated_at|date:'c' }}" class="updated-time">
+                            Resolved: {{ incident.updated_at|date:"M j, Y g:i A" }}
+                        </time>
                     </div>
                 </div>
                 <p class="incident-text">{{ incident.text }}</p>
@@ -138,7 +140,7 @@
     </div>
 
     <script>
-        // Update "last checked" time every 30 seconds
+        // Update "last checked" time every second
         (function () {
             const lastChecked = document.getElementById('last-checked');
             let seconds = 0;
