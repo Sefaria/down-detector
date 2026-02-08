@@ -2,7 +2,16 @@
 Pytest configuration and shared fixtures.
 """
 import pytest
+from django.core.cache import cache
 from django.utils import timezone
+
+
+@pytest.fixture(autouse=True)
+def clear_cache():
+    """Clear Django cache before each test to avoid cache_page interference."""
+    cache.clear()
+    yield
+    cache.clear()
 
 
 @pytest.fixture
@@ -26,3 +35,4 @@ def sample_message_data():
         "text": "Test incident message",
         "active": True,
     }
+

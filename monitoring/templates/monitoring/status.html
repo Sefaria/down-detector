@@ -1,49 +1,107 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sefaria Status</title>
-    <meta name="description" content="Current status of Sefaria services">
-    {% load static %}
-    <link rel="stylesheet" href="{% static 'monitoring/style.css' %}">
+    <meta name="description" content="Real-time status page for Sefaria services">
+    <link rel="stylesheet" href="{% load static %}{% static 'monitoring/style.css' %}">
 </head>
+
 <body>
     <div class="container">
-        <header class="header">
+        <header>
             <h1>Sefaria Status</h1>
-            <p class="last-updated">Status page loading...</p>
+            <p class="subtitle">Real-time service health monitoring</p>
         </header>
 
-        <main>
-            <!-- Overall Status Banner -->
-            <section class="status-banner status-operational">
-                <span class="status-icon">🟢</span>
-                <span class="status-text">All Systems Operational</span>
-            </section>
+        <!-- Overall Status Banner -->
+        <section class="overall-status status-{{ overall_status }}">
+            <div class="status-icon">
+                {% if overall_status == 'operational' %}
+                <svg class="icon-check" viewBox="0 0 24 24" fill="currentColor">
+                    <path
+                        d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
+                </svg>
+                {% elif overall_status == 'partial' %}
+                <svg class="icon-warning" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z" />
+                </svg>
+                {% else %}
+                <svg class="icon-error" viewBox="0 0 24 24" fill="currentColor">
+                    <path
+                        d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
+                </svg>
+                {% endif %}
+            </div>
+            <span class="status-text">{{ status_label }}</span>
+        </section>
 
-            <!-- Service Status -->
-            <section class="services">
-                <h2>Services</h2>
-                <p class="placeholder">Service status will be displayed here.</p>
-            </section>
+        <!-- Service Status List -->
+        <section class="services">
+            <h2>Services</h2>
+            <div class="service-list">
+                {% for service in services %}
+                <div class="service-item status-{{ service.status }}">
+                    <span class="service-name">{{ service.name }}</span>
+                    <span class="service-status">
+                        {% if service.status == 'up' %}
+                        <span class="status-badge status-up">Operational</span>
+                        {% if service.response_time_ms %}
+                        <span class="response-time">{{ service.response_time_ms }}ms</span>
+                        {% endif %}
+                        {% elif service.status == 'down' %}
+                        <span class="status-badge status-down">Down</span>
+                        {% else %}
+                        <span class="status-badge status-unknown">Unknown</span>
+                        {% endif %}
+                    </span>
+                </div>
+                {% empty %}
+                <p class="no-services">No services configured.</p>
+                {% endfor %}
+            </div>
+        </section>
 
-            <!-- Active Incidents -->
-            <section class="incidents">
-                <h2>Active Incidents</h2>
-                <p class="placeholder">No active incidents.</p>
-            </section>
+        <!-- Active Incidents -->
+        {% if active_incidents %}
+        <section class="incidents active-incidents">
+            <h2>Active Incidents</h2>
+            {% for incident in active_incidents %}
+            <div class="incident severity-{{ incident.severity }}">
+                <div class="incident-header">
+                    <span class="severity-badge">{{ incident.get_severity_display }}</span>
+                    <time datetime="{{ incident.created_at|date:'c' }}">{{ incident.created_at|date:"M j, Y g:i A"
+                        }}</time>
+                </div>
+                <p class="incident-text">{{ incident.text }}</p>
+            </div>
+            {% endfor %}
+        </section>
+        {% endif %}
 
-            <!-- Incident History -->
-            <section class="history">
-                <h2>Past Incidents</h2>
-                <p class="placeholder">No recent incidents.</p>
-            </section>
-        </main>
+        <!-- Incident History -->
+        {% if resolved_incidents %}
+        <section class="incidents resolved-incidents">
+            <h2>Recent Incident History</h2>
+            {% for incident in resolved_incidents %}
+            <div class="incident severity-resolved">
+                <div class="incident-header">
+                    <span class="severity-badge resolved">Resolved</span>
+                    <time datetime="{{ incident.updated_at|date:'c' }}">{{ incident.updated_at|date:"M j, Y g:i A"
+                        }}</time>
+                </div>
+                <p class="incident-text">{{ incident.text }}</p>
+            </div>
+            {% endfor %}
+        </section>
+        {% endif %}
 
-        <footer class="footer">
-            <p>Powered by Sefaria</p>
+        <footer>
+            <p>&copy; Sefaria. Powered by our uptime monitoring system.</p>
         </footer>
     </div>
 </body>
+
 </html>
