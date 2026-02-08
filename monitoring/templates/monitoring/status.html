@@ -89,8 +89,14 @@
             <div class="incident severity-{{ incident.severity }}">
                 <div class="incident-header">
                     <span class="severity-badge">{{ incident.get_severity_display }}</span>
-                    <time datetime="{{ incident.created_at|date:'c' }}">{{ incident.created_at|date:"M j, Y g:i A"
-                        }}</time>
+                    <div class="incident-times">
+                        <time datetime="{{ incident.created_at|date:'c' }}">Created: {{ incident.created_at|date:"M j, Y
+                            g:i A" }}</time>
+                        {% if incident.updated_at != incident.created_at %}
+                        <time datetime="{{ incident.updated_at|date:'c' }}" class="updated-time">Updated: {{
+                            incident.updated_at|date:"M j, Y g:i A" }}</time>
+                        {% endif %}
+                    </div>
                 </div>
                 <p class="incident-text">{{ incident.text }}</p>
             </div>
@@ -106,7 +112,12 @@
             <div class="incident severity-resolved">
                 <div class="incident-header">
                     <span class="severity-badge resolved">Resolved</span>
-                    <time datetime="{{ incident.updated_at|date:'c' }}">{{ incident.updated_at|date:"M j, Y" }}</time>
+                    <div class="incident-times">
+                        <time datetime="{{ incident.created_at|date:'c' }}">Created: {{ incident.created_at|date:"M j, Y
+                            g:i A" }}</time>
+                        <time datetime="{{ incident.updated_at|date:'c' }}" class="updated-time">Resolved: {{
+                            incident.updated_at|date:"M j, Y g:i A" }}</time>
+                    </div>
                 </div>
                 <p class="incident-text">{{ incident.text }}</p>
             </div>

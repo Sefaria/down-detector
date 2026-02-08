@@ -354,9 +354,21 @@ header .subtitle {
     color: var(--status-resolved);
 }
 
+.incident-times {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.15rem;
+}
+
 .incident-header time {
     color: var(--text-secondary);
-    font-size: 0.8rem;
+    font-size: 0.75rem;
+}
+
+.incident-header .updated-time {
+    font-style: italic;
+    opacity: 0.8;
 }
 
 .incident-text {
