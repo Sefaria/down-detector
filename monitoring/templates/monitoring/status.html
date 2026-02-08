@@ -16,8 +16,8 @@
     <meta property="og:url" content="https://status.sefaria.org">
 
     <!-- Favicon -->
-    <link rel="icon" type="image/x-icon" href="https://www.sefaria.org/static/icons/favicon.ico">
-    <link rel="apple-touch-icon" href="https://www.sefaria.org/static/icons/apple-touch-icon.png">
+    <link rel="icon" type="image/x-icon" href="{% static 'icons/favicon.ico' %}">
+    <link rel="apple-touch-icon" href="{% static 'icons/apple-touch-icon.png' %}">
 
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -32,8 +32,7 @@
         <!-- Header with Logo -->
         <header>
             <a href="https://www.sefaria.org" class="logo-link" target="_blank" rel="noopener">
-                <img src="https://www.sefaria.org/static/img/logo.svg" alt="Sefaria" class="logo"
-                    onerror="this.style.display='none'">
+                <img src="{% static 'img/logo.svg' %}" alt="Sefaria" class="logo" onerror="this.style.display='none'">
             </a>
             <h1>Sefaria Status</h1>
             <p class="subtitle">Real-time service health monitoring</p>
