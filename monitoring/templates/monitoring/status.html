@@ -5,12 +5,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sefaria Status</title>
+    <title>Sefaria Status - Service Health Monitoring</title>
     <meta name="description"
         content="Real-time status page for Sefaria services - Check the operational status of sefaria.org and related services.">
 
     <!-- Open Graph -->
-    <meta property="og:title" content="Sefaria Status">
+    <meta property="og:title" content="Sefaria Status - Service Health Monitoring">
     <meta property="og:description" content="Real-time status of Sefaria services">
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://status.sefaria.org">
@@ -28,10 +28,13 @@
     <div class="container">
         <!-- Header with Logo -->
         <header>
-            <a href="https://www.sefaria.org" class="logo-link" target="_blank" rel="noopener">
-                <img src="{% static 'img/logo.svg' %}" alt="Sefaria" class="logo" onerror="this.style.display='none'">
-            </a>
-            <h1>Sefaria Status</h1>
+            <div class="header-main">
+                <a href="https://www.sefaria.org" class="logo-link" target="_blank" rel="noopener">
+                    <img src="{% static 'img/logo.svg' %}" alt="Sefaria" class="logo"
+                        onerror="this.style.display='none'">
+                </a>
+                <h1>Status</h1>
+            </div>
             <p class="subtitle">Real-time service health monitoring</p>
         </header>
 

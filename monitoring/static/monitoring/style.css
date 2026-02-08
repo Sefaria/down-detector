@@ -31,9 +31,15 @@
     box-sizing: border-box;
 }
 
+html {
+    background-color: #0f172a;
+    /* var(--bg-primary) fallback */
+    background-color: var(--bg-primary);
+}
+
 body {
     font-family: var(--font-family);
-    background: linear-gradient(135deg, var(--bg-primary) 0%, #1a2744 100%);
+    background: linear-gradient(135deg, var(--bg-primary) 0%, #1a2744 100%) fixed;
     color: var(--text-primary);
     line-height: 1.6;
     min-height: 100vh;
@@ -54,9 +60,18 @@ header {
     margin-bottom: 2rem;
 }
 
+.header-main {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    margin-bottom: 0.25rem;
+}
+
 .logo-link {
-    display: inline-block;
-    margin-bottom: 0.75rem;
+    display: flex;
+    align-items: center;
+    margin-bottom: 0;
 }
 
 .logo {
