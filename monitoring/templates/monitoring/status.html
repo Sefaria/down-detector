@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sefaria Status</title>
+    <meta name="description" content="Current status of Sefaria services">
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'monitoring/style.css' %}">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>Sefaria Status</h1>
+            <p class="last-updated">Status page loading...</p>
+        </header>
+
+        <main>
+            <!-- Overall Status Banner -->
+            <section class="status-banner status-operational">
+                <span class="status-icon">🟢</span>
+                <span class="status-text">All Systems Operational</span>
+            </section>
+
+            <!-- Service Status -->
+            <section class="services">
+                <h2>Services</h2>
+                <p class="placeholder">Service status will be displayed here.</p>
+            </section>
+
+            <!-- Active Incidents -->
+            <section class="incidents">
+                <h2>Active Incidents</h2>
+                <p class="placeholder">No active incidents.</p>
+            </section>
+
+            <!-- Incident History -->
+            <section class="history">
+                <h2>Past Incidents</h2>
+                <p class="placeholder">No recent incidents.</p>
+            </section>
+        </main>
+
+        <footer class="footer">
+            <p>Powered by Sefaria</p>
+        </footer>
+    </div>
+</body>
+</html>
