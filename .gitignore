@@ -38,7 +38,6 @@ db.sqlite3-journal
 
 # Static files
 staticfiles/
-static/
 
 # Environment variables
 .env
@@ -56,6 +55,7 @@ static/
 htmlcov/
 .pytest_cache/
 .tox/
+test_output.txt
 
 # mypy
 .mypy_cache/
@@ -67,5 +67,8 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
-# Migrations
+# Migrations (regenerated in production)
 monitoring/migrations/
+
+# Planning documents (not part of codebase)
+plan.md
