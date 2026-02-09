@@ -43,6 +43,7 @@ staticfiles/
 .env
 .env.local
 .env.production
+docker-compose.override.yml
 
 # IDE
 .idea/
