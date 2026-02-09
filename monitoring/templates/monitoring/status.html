@@ -90,11 +90,13 @@
                 <div class="incident-header">
                     <span class="severity-badge">{{ incident.get_severity_display }}</span>
                     <div class="incident-times">
-                        <time datetime="{{ incident.created_at|date:'c' }}">Created: {{ incident.created_at|date:"M j, Y
-                            g:i A" }}</time>
+                        <time datetime="{{ incident.created_at|date:'c' }}">
+                            Created: {{ incident.created_at|date:"M j, Y g:i A" }}
+                        </time>
                         {% if incident.updated_at != incident.created_at %}
-                        <time datetime="{{ incident.updated_at|date:'c' }}" class="updated-time">Updated: {{
-                            incident.updated_at|date:"M j, Y g:i A" }}</time>
+                        <time datetime="{{ incident.updated_at|date:'c' }}" class="updated-time">
+                            Updated: {{ incident.updated_at|date:"M j, Y g:i A" }}
+                        </time>
                         {% endif %}
                     </div>
                 </div>
