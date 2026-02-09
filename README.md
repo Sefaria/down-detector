@@ -11,8 +11,8 @@ Real-time uptime monitoring system for Sefaria's critical services.
 - **Health Checking**: Periodic HTTP checks with configurable retries
 - **State Tracking**: Detects UP/DOWN transitions to prevent alert storms
 - **Slack Alerts**: Block Kit formatted notifications on state changes
-- **Status Page**: Public dashboard at `status.sefaria.org`
-- **Retention Cleanup**: Automatic old record purging
+- **Status Page**: Public dashboard at `status.sefaria.org` with 60s auto-refresh
+- **Scheduled Cleanup**: Automatic daily purging of old records at 3 AM UTC
 
 ## Quick Start
 
@@ -89,7 +89,7 @@ MONITORED_SERVICES = [
         "url": "https://www.sefaria.org/api/find-refs",
         "method": "POST",
         "expected_status": 202,
-        "request_body": {"text": "health check"},
+        "request_body": {"text": {"title": "", "body": "Job 1:1"}},
     },
     # ...
 ]
@@ -98,13 +98,13 @@ MONITORED_SERVICES = [
 ## Management Commands
 
 ```bash
-# Run health check scheduler
+# Run health check scheduler (includes auto-cleanup at 3 AM UTC)
 python manage.py run_checks
 
 # Run once (for testing)
 python manage.py run_checks --once
 
-# Cleanup old records
+# Manual cleanup (runs automatically via scheduler)
 python manage.py cleanup_old_checks
 
 # Dry run cleanup
