@@ -33,11 +33,13 @@ def run_health_check_cycle():
     logger.info("Starting health check cycle...")
     
     try:
-        # Run checks and persist results
+        # 1. Get state tracker first (ensures it reads PREVIOUS state from DB)
+        tracker = get_state_tracker()
+        
+        # 2. Run checks and persist results
         results = check_all_services(persist=True)
         
-        # Get state tracker and process results
-        tracker = get_state_tracker()
+        # 3. Process results relative to the tracker's initialized state
         transitions = tracker.process_results(results)
         
         # Send Slack alerts for transitions
