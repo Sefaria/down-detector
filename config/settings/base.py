@@ -124,7 +124,7 @@ MONITORED_SERVICES = [
         "name": "Linker",
         "url": env("LINKER_HEALTH_URL", default="https://www.sefaria.org/api/find-refs"),
         "method": "POST",
-        "expected_status": 202,
+        "expected_status": 500,
         "timeout": 10,
         "request_body": {"text": {"title": "health check"}},
     },

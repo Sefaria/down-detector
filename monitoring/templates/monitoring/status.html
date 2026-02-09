@@ -153,6 +153,11 @@
                     lastChecked.textContent = mins + 'm ago';
                 }
             }, 1000);
+
+            // Auto-refresh: Reload page every 60 seconds to get fresh data
+            setTimeout(function () {
+                window.location.reload();
+            }, 60000);
         })();
     </script>
 </body>
