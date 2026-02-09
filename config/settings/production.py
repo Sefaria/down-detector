@@ -26,9 +26,19 @@ SECURE_HSTS_SECONDS = 31536000
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 SECURE_HSTS_PRELOAD = True
 
+# Proxy configuration
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
 # CSRF settings
 CSRF_COOKIE_SECURE = True
 SESSION_COOKIE_SECURE = True
+
+# CSRF Trusted Origins (required for Django 4.0+ over HTTPS)
+# We handle both status.sefaria.org and coolify dev domains automatically
+CSRF_TRUSTED_ORIGINS = env.list(
+    "CSRF_TRUSTED_ORIGINS",
+    default=[f"https://{host}" for host in ALLOWED_HOSTS if host not in ["localhost", "127.0.0.1"]]
+)
 
 # Logging
 LOGGING = {
