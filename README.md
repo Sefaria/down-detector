@@ -81,7 +81,8 @@ MONITORED_SERVICES = [
         "name": "sefaria.org",
         "url": "https://www.sefaria.org/healthz",
         "method": "GET",
-        "expected_status": 302,
+        "follow_redirects": True,
+        "expected_status": 200,
     },
     {
         "name": "Linker",

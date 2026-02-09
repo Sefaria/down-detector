@@ -67,8 +67,5 @@ test_output.txt
 .DS_Store
 Thumbs.db
 
-# Migrations (regenerated in production)
-monitoring/migrations/
-
 # Planning documents (not part of codebase)
 plan.md
