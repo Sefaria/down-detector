@@ -5,15 +5,48 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sefaria Status - Service Health Monitoring</title>
+    <title>Is Sefaria Down? - Sefaria Status & Service Health</title>
     <meta name="description"
-        content="Real-time status page for Sefaria services - Check the operational status of sefaria.org and related services.">
+        content="Check if Sefaria is down. Real-time status for Sefaria.org, API, and related services. View active incidents and uptime history.">
+    <meta name="keywords"
+        content="is sefaria down, sefaria status, sefaria uptime, sefaria server status, jewish texts online">
+    <link rel="canonical" href="https://status.sefaria.org/">
 
     <!-- Open Graph -->
-    <meta property="og:title" content="Sefaria Status - Service Health Monitoring">
-    <meta property="og:description" content="Real-time status of Sefaria services">
+    <meta property="og:title" content="Is Sefaria Down? - Sefaria Status & Service Health">
+    <meta property="og:description"
+        content="Check real-time status of Sefaria services. See if Sefaria is down or experiencing issues.">
     <meta property="og:type" content="website">
-    <meta property="og:url" content="https://status.sefaria.org">
+    <meta property="og:url" content="https://status.sefaria.org/">
+    <meta property="og:site_name" content="Sefaria Status">
+    <meta property="og:image" content="{% static 'img/og-image.png' %}">
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Is Sefaria Down? - Sefaria Status & Service Health">
+    <meta name="twitter:description"
+        content="Check real-time status of Sefaria services. See if Sefaria is down or experiencing issues.">
+    <meta name="twitter:image" content="{% static 'img/og-image.png' %}">
+
+    <!-- Schema.org JSON-LD -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "name": "Sefaria Status",
+      "url": "https://status.sefaria.org/",
+      "description": "Real-time status monitoring for Sefaria services.",
+      "publisher": {
+        "@type": "Organization",
+        "name": "Sefaria",
+        "url": "https://www.sefaria.org",
+        "logo": {
+          "@type": "ImageObject",
+          "url": "https://status.sefaria.org{% static 'img/logo.svg' %}"
+        }
+      }
+    }
+    </script>
 
     <!-- Favicon -->
     <link rel="icon" type="image/x-icon" href="{% static 'icons/favicon.ico' %}">

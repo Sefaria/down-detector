@@ -3,8 +3,10 @@ Views for the status page.
 """
 from django.conf import settings
 from django.db.models import Max
+from django.http import HttpResponse
 from django.views.decorators.cache import cache_page
 from django.shortcuts import render
+from django.urls import reverse
 
 from monitoring.models import HealthCheck, Message
 
@@ -105,3 +107,29 @@ def status_page(request):
     }
     
     return render(request, "monitoring/status.html", context)
+
+
+@cache_page(60 * 60)
+def robots_txt(request):
+    """Serve robots.txt file."""
+    lines = [
+        "User-agent: *",
+        "Allow: /",
+        f"Sitemap: {settings.STATUS_PAGE_URL}/sitemap.xml",
+    ]
+    return HttpResponse("\\n".join(lines), content_type="text/plain")
+
+
+def sitemap_xml(request):
+    """Serve sitemap.xml file."""
+    # We only have one page right now
+    url = settings.STATUS_PAGE_URL
+    xml = f'''<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>{url}/</loc>
+    <changefreq>always</changefreq>
+    <priority>1.0</priority>
+  </url>
+</urlset>'''
+    return HttpResponse(xml, content_type="application/xml")
