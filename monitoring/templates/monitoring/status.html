@@ -49,7 +49,7 @@
     </script>
 
     <!-- Favicon -->
-    <link rel="icon" type="image/x-icon" href="{% static 'icons/favicon.ico' %}">
+    <link rel="icon" id="favicon" type="image/x-icon" href="{% static 'icons/favicon.ico' %}">
     <link rel="apple-touch-icon" href="{% static 'icons/apple-touch-icon.png' %}">
 
 
@@ -193,6 +193,60 @@
             setTimeout(function () {
                 window.location.reload();
             }, 60000);
+
+            // Dynamic Favicon with Status Dot
+            function updateFaviconWithStatus() {
+                const favicon = document.getElementById('favicon');
+                const overallStatus = "{{ overall_status }}";
+
+                // Map Django status to colors from our CSS
+                const colorMap = {
+                    'operational': '#10B981',
+                    'partial': '#F59E0B',
+                    'major': '#EF4444'
+                };
+
+                const dotColor = colorMap[overallStatus] || '#6B7280';
+
+                const img = new Image();
+                img.src = favicon.href;
+                img.crossOrigin = "anonymous"; // Basic precaution
+
+                img.onload = function () {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = 32;
+                    canvas.height = 32;
+                    const ctx = canvas.getContext('2d');
+
+                    // 1. Draw original favicon
+                    ctx.drawImage(img, 0, 0, 32, 32);
+
+                    // 2. Clear a small circle area for the dot (optional but cleaner)
+                    ctx.globalCompositeOperation = 'destination-out';
+                    ctx.beginPath();
+                    ctx.arc(24, 24, 8, 0, 2 * Math.PI);
+                    ctx.fill();
+                    ctx.globalCompositeOperation = 'source-over';
+
+                    // 3. Draw white border for the dot
+                    ctx.beginPath();
+                    ctx.arc(24, 24, 8, 0, 2 * Math.PI);
+                    ctx.fillStyle = 'white';
+                    ctx.fill();
+
+                    // 4. Draw the status color dot
+                    ctx.beginPath();
+                    ctx.arc(24, 24, 6, 0, 2 * Math.PI);
+                    ctx.fillStyle = dotColor;
+                    ctx.fill();
+
+                    // 5. Update the favicon link
+                    favicon.href = canvas.toDataURL('image/png');
+                };
+            }
+
+            // Run on load
+            updateFaviconWithStatus();
         })();
     </script>
 </body>
