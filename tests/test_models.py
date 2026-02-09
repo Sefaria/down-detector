@@ -46,10 +46,13 @@ class TestHealthCheckModel:
 
     def test_healthcheck_indexes_exist(self):
         """Composite index exists on service_name + checked_at."""
-        # Get index names from the database
+        # Get index names from the database (PostgreSQL-compatible)
         with connection.cursor() as cursor:
             cursor.execute(
-                "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='monitoring_healthcheck'"
+                """
+                SELECT indexname FROM pg_indexes 
+                WHERE tablename = 'monitoring_healthcheck'
+                """
             )
             indexes = [row[0] for row in cursor.fetchall()]
 

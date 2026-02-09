@@ -93,7 +93,7 @@ class TestSchedulerStartStop:
 
     @patch("monitoring.services.scheduler.BackgroundScheduler")
     def test_start_scheduler_configures_job(self, mock_scheduler_class):
-        """start_scheduler adds health check job with correct interval."""
+        """start_scheduler adds health check and cleanup jobs."""
         from monitoring.services.scheduler import start_scheduler
         import monitoring.services.scheduler as scheduler_module
         
@@ -105,10 +105,14 @@ class TestSchedulerStartStop:
         
         start_scheduler()
         
-        # Verify job was added
-        mock_scheduler.add_job.assert_called_once()
-        call_kwargs = mock_scheduler.add_job.call_args[1]
-        assert call_kwargs["id"] == "health_check_cycle"
+        # Verify both jobs were added (health check + cleanup)
+        assert mock_scheduler.add_job.call_count == 2
+        
+        # Verify health check job was configured
+        call_args_list = mock_scheduler.add_job.call_args_list
+        job_ids = [call[1]["id"] for call in call_args_list]
+        assert "health_check_cycle" in job_ids
+        assert "daily_cleanup" in job_ids
         
         # Verify scheduler was started
         mock_scheduler.start.assert_called_once()
