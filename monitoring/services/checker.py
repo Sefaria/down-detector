@@ -41,11 +41,13 @@ def _make_request(
     method: str,
     url: str,
     timeout: int,
+    follow_redirects: bool = False,
     body: dict[str, Any] | None = None,
 ) -> httpx.Response:
     """Make an HTTP request with the given parameters."""
     kwargs: dict[str, Any] = {
         "timeout": timeout,
+        "follow_redirects": follow_redirects,
     }
     if body and method.upper() == "POST":
         kwargs["json"] = body
@@ -88,6 +90,7 @@ def check_service(
     expected_status = config.get("expected_status", 200)
     timeout = config.get("timeout", 10)
     request_body = config.get("request_body")
+    follow_redirects = config.get("follow_redirects", False)
 
     result = _check_with_retry(
         service_name=service_name,
@@ -96,6 +99,7 @@ def check_service(
         expected_status=expected_status,
         timeout=timeout,
         request_body=request_body,
+        follow_redirects=follow_redirects,
         max_retries=max_retries,
         retry_delay=retry_delay,
     )
@@ -113,6 +117,7 @@ def _check_with_retry(
     expected_status: int,
     timeout: int,
     request_body: dict[str, Any] | None,
+    follow_redirects: bool,
     max_retries: int,
     retry_delay: float,
 ) -> HealthCheckResult:
@@ -129,6 +134,7 @@ def _check_with_retry(
                     method=method,
                     url=url,
                     timeout=timeout,
+                    follow_redirects=follow_redirects,
                     body=request_body,
                 )
 

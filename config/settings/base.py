@@ -118,6 +118,7 @@ MONITORED_SERVICES = [
         "method": "GET",
         "expected_status": 200,
         "timeout": 10,
+        "follow_redirects": True,
     },
     {
         "name": "Linker",
@@ -127,13 +128,13 @@ MONITORED_SERVICES = [
         "timeout": 10,
         "request_body": {"text": {"title": "health check"}},
     },
-    {
-        "name": "MCP Server",
-        "url": env("MCP_HEALTH_URL", default="https://mcp.sefaria.org/sse"),
-        "method": "GET",
-        "expected_status": 200,
-        "timeout": 5,
-    },
+    # {
+    #     "name": "MCP Server",
+    #     "url": env("MCP_HEALTH_URL", default="https://mcp.sefaria.org/sse"),
+    #     "method": "GET",
+    #     "expected_status": 200,
+    #     "timeout": 5,
+    # },
 ]
 
 # Check interval in seconds
