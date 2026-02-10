@@ -9,6 +9,7 @@ Real-time uptime monitoring system for Sefaria's critical services.
 ## Features
 
 - **Health Checking**: Periodic HTTP checks with configurable retries
+- **Async E2E Verification**: Two-phase check for the Linker API — verifies task submission *and* successful processing
 - **State Tracking**: Detects UP/DOWN transitions to prevent alert storms
 - **Slack Alerts**: Block Kit formatted notifications on state changes
 - **Status Page**: Public dashboard at `status.sefaria.org` with 60s auto-refresh
@@ -89,7 +90,13 @@ MONITORED_SERVICES = [
         "url": "https://www.sefaria.org/api/find-refs",
         "method": "POST",
         "expected_status": 202,
+        "check_type": "async_two_phase",
         "request_body": {"text": {"title": "", "body": "Job 1:1"}},
+        "async_verification": {
+            "base_url": "https://www.sefaria.org/api/async/",
+            "max_poll_attempts": 10,
+            "poll_interval": 1,
+        },
     },
     # ...
 ]

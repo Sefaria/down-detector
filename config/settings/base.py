@@ -134,7 +134,7 @@ MONITORED_SERVICES = [
         "expected_status": 202,
         "timeout": 15,
         "check_type": "async_two_phase",
-        "request_body": {"text": {"title": "", "body": "Genesis 1:1"}},
+        "request_body": {"text": {"title": "", "body": "Job 1:1"}},
         "async_verification": {
             "base_url": "https://www.sefaria.org/api/async/",
             "max_poll_attempts": 10,
