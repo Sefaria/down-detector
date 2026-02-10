@@ -2,6 +2,7 @@
 Health checker service using httpx with tenacity retry logic.
 """
 import logging
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -72,6 +73,8 @@ def check_service(
             - expected_status: Expected HTTP status code
             - timeout: Request timeout in seconds
             - request_body: Optional request body for POST
+            - check_type: Optional, "async_two_phase" for async verification
+            - async_verification: Optional config for async polling
         max_retries: Number of retry attempts (default from settings)
         retry_delay: Delay between retries in seconds (default from settings)
         persist: Whether to save result to database
@@ -85,29 +88,230 @@ def check_service(
         retry_delay = getattr(settings, "HEALTH_CHECK_RETRY_DELAY", 10)
 
     service_name = config["name"]
-    url = config["url"]
-    method = config.get("method", "GET")
-    expected_status = config.get("expected_status", 200)
-    timeout = config.get("timeout", 10)
-    request_body = config.get("request_body")
-    follow_redirects = config.get("follow_redirects", False)
+    check_type = config.get("check_type", "standard")
 
-    result = _check_with_retry(
-        service_name=service_name,
-        url=url,
-        method=method,
-        expected_status=expected_status,
-        timeout=timeout,
-        request_body=request_body,
-        follow_redirects=follow_redirects,
-        max_retries=max_retries,
-        retry_delay=retry_delay,
-    )
+    if check_type == "async_two_phase":
+        result = _check_async_two_phase(config)
+    else:
+        url = config["url"]
+        method = config.get("method", "GET")
+        expected_status = config.get("expected_status", 200)
+        timeout = config.get("timeout", 10)
+        request_body = config.get("request_body")
+        follow_redirects = config.get("follow_redirects", False)
+
+        result = _check_with_retry(
+            service_name=service_name,
+            url=url,
+            method=method,
+            expected_status=expected_status,
+            timeout=timeout,
+            request_body=request_body,
+            follow_redirects=follow_redirects,
+            max_retries=max_retries,
+            retry_delay=retry_delay,
+        )
 
     if persist:
         _persist_result(result)
 
     return result
+
+
+def _check_async_two_phase(config: dict[str, Any]) -> HealthCheckResult:
+    """
+    Two-phase async health check for services like the Linker API.
+
+    Phase 1: Submit task (POST), expect 202 + task_id
+    Phase 2: Poll async endpoint until task completes (SUCCESS)
+
+    This catches failures in background workers, ML models,
+    ElasticSearch, and other backend dependencies that a simple
+    202 check would miss.
+    """
+    service_name = config["name"]
+    url = config["url"]
+    timeout = config.get("timeout", 15)
+    request_body = config.get("request_body")
+    expected_status = config.get("expected_status", 202)
+
+    async_config = config.get("async_verification", {})
+    max_poll_attempts = async_config.get("max_poll_attempts", 10)
+    poll_interval = async_config.get("poll_interval", 1)
+    async_base_url = async_config.get(
+        "base_url", "https://www.sefaria.org/api/async/"
+    )
+
+    start_time = time.monotonic()
+
+    try:
+        # ── Phase 1: Submit task ──────────────────────────────────
+        with httpx.Client() as client:
+            response = _make_request(
+                client=client,
+                method="POST",
+                url=url,
+                timeout=timeout,
+                body=request_body,
+            )
+
+            if response.status_code != expected_status:
+                elapsed = int((time.monotonic() - start_time) * 1000)
+                error = f"Phase 1 failed: expected {expected_status}, got {response.status_code}"
+                logger.warning(f"Linker check failed for {service_name}: {error}")
+                return HealthCheckResult(
+                    service_name=service_name,
+                    status="down",
+                    response_time_ms=elapsed,
+                    status_code=response.status_code,
+                    error_message=error,
+                )
+
+            # Extract task_id from response
+            try:
+                data = response.json()
+                task_id = data.get("task_id")
+            except Exception:
+                task_id = None
+
+            if not task_id:
+                elapsed = int((time.monotonic() - start_time) * 1000)
+                error = "Phase 1 failed: no task_id in response"
+                logger.warning(f"Linker check failed for {service_name}: {error}")
+                return HealthCheckResult(
+                    service_name=service_name,
+                    status="down",
+                    response_time_ms=elapsed,
+                    status_code=response.status_code,
+                    error_message=error,
+                )
+
+            logger.info(f"Linker Phase 1 passed: task_id={task_id}")
+
+        # ── Phase 2: Poll for task completion ─────────────────────
+        async_url = f"{async_base_url}{task_id}"
+
+        with httpx.Client() as client:
+            for attempt in range(max_poll_attempts):
+                time.sleep(poll_interval)
+
+                try:
+                    poll_response = client.get(async_url, timeout=10)
+                except (httpx.TimeoutException, httpx.HTTPError) as e:
+                    logger.debug(
+                        f"Linker Phase 2 poll {attempt + 1}/{max_poll_attempts} "
+                        f"error: {e}"
+                    )
+                    continue
+
+                if poll_response.status_code != 200:
+                    logger.debug(
+                        f"Linker Phase 2 poll {attempt + 1}/{max_poll_attempts}: "
+                        f"status {poll_response.status_code}"
+                    )
+                    continue
+
+                try:
+                    result_data = poll_response.json()
+                except Exception:
+                    continue
+
+                state = result_data.get("state", "")
+
+                if state == "SUCCESS":
+                    # Verify result contains actual data
+                    result_content = result_data.get("result")
+                    elapsed = int((time.monotonic() - start_time) * 1000)
+
+                    if result_content:
+                        logger.info(
+                            f"Linker E2E check passed for {service_name} "
+                            f"in {elapsed}ms (poll {attempt + 1})"
+                        )
+                        return HealthCheckResult(
+                            service_name=service_name,
+                            status="up",
+                            response_time_ms=elapsed,
+                            status_code=200,
+                            error_message="",
+                        )
+                    else:
+                        error = "Phase 2: task succeeded but returned empty result"
+                        logger.warning(f"Linker check: {error}")
+                        return HealthCheckResult(
+                            service_name=service_name,
+                            status="down",
+                            response_time_ms=elapsed,
+                            status_code=200,
+                            error_message=error,
+                        )
+
+                elif state == "FAILURE":
+                    elapsed = int((time.monotonic() - start_time) * 1000)
+                    task_error = result_data.get("error", "Unknown error")
+                    error = f"Phase 2: task failed - {task_error}"
+                    logger.warning(f"Linker check failed for {service_name}: {error}")
+                    return HealthCheckResult(
+                        service_name=service_name,
+                        status="down",
+                        response_time_ms=elapsed,
+                        status_code=200,
+                        error_message=error,
+                    )
+
+                # PENDING or STARTED - keep polling
+                logger.debug(
+                    f"Linker Phase 2 poll {attempt + 1}/{max_poll_attempts}: "
+                    f"state={state}"
+                )
+
+        # Polling exhausted - task never completed
+        elapsed = int((time.monotonic() - start_time) * 1000)
+        error = f"Phase 2: task processing timeout after {max_poll_attempts} polls"
+        logger.error(f"Linker check failed for {service_name}: {error}")
+        return HealthCheckResult(
+            service_name=service_name,
+            status="down",
+            response_time_ms=elapsed,
+            status_code=202,
+            error_message=error,
+        )
+
+    except httpx.TimeoutException as e:
+        elapsed = int((time.monotonic() - start_time) * 1000)
+        error = f"Request timed out: {e}"
+        logger.warning(f"Linker check timeout for {service_name}: {e}")
+        return HealthCheckResult(
+            service_name=service_name,
+            status="down",
+            response_time_ms=elapsed,
+            status_code=None,
+            error_message=error,
+        )
+
+    except httpx.ConnectError as e:
+        elapsed = int((time.monotonic() - start_time) * 1000)
+        error = f"Connection error: {e}"
+        logger.warning(f"Linker check connection error for {service_name}: {e}")
+        return HealthCheckResult(
+            service_name=service_name,
+            status="down",
+            response_time_ms=elapsed,
+            status_code=None,
+            error_message=error,
+        )
+
+    except Exception as e:
+        elapsed = int((time.monotonic() - start_time) * 1000)
+        error = f"Unexpected error: {e}"
+        logger.exception(f"Unexpected error checking Linker {service_name}")
+        return HealthCheckResult(
+            service_name=service_name,
+            status="down",
+            response_time_ms=elapsed,
+            status_code=None,
+            error_message=error,
+        )
 
 
 def _check_with_retry(
@@ -177,7 +381,6 @@ def _check_with_retry(
 
         # Wait before retry (except on last attempt)
         if attempt < max_retries - 1:
-            import time
             time.sleep(retry_delay)
 
     # All retries failed

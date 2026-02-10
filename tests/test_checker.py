@@ -338,3 +338,197 @@ class TestCheckAllServices:
         # Should check all services from settings (test settings has 1 service)
         assert mock_check_service.call_count >= 1
         assert len(results) >= 1
+
+
+class TestAsyncTwoPhaseCheck:
+    """Tests for the async two-phase health check (Linker API)."""
+
+    LINKER_CONFIG = {
+        "name": "Linker",
+        "url": "https://www.sefaria.org/api/find-refs",
+        "method": "POST",
+        "expected_status": 202,
+        "timeout": 15,
+        "check_type": "async_two_phase",
+        "request_body": {"text": {"title": "", "body": "Genesis 1:1"}},
+        "async_verification": {
+            "base_url": "https://www.sefaria.org/api/async/",
+            "max_poll_attempts": 3,
+            "poll_interval": 0.01,  # Fast for tests
+        },
+    }
+
+    @patch("monitoring.services.checker.time.sleep")
+    @patch("monitoring.services.checker.httpx.Client")
+    def test_two_phase_success(self, mock_client_class, mock_sleep):
+        """Full E2E: submit returns 202+task_id, poll returns SUCCESS -> up."""
+        from monitoring.services.checker import check_service
+
+        # Phase 1: POST -> 202 with task_id
+        mock_submit_response = MagicMock()
+        mock_submit_response.status_code = 202
+        mock_submit_response.json.return_value = {"task_id": "abc-123"}
+
+        # Phase 2: GET -> SUCCESS with result
+        mock_poll_response = MagicMock()
+        mock_poll_response.status_code = 200
+        mock_poll_response.json.return_value = {
+            "state": "SUCCESS",
+            "result": {"body": "Found refs"},
+        }
+
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        # First client: submit (POST via request). Second client: poll (GET).
+        mock_client.request.return_value = mock_submit_response
+        mock_client.get.return_value = mock_poll_response
+        mock_client_class.return_value = mock_client
+
+        result = check_service(self.LINKER_CONFIG)
+
+        assert result.status == "up"
+        assert result.error_message == ""
+        assert result.response_time_ms is not None
+
+    @patch("monitoring.services.checker.time.sleep")
+    @patch("monitoring.services.checker.httpx.Client")
+    def test_two_phase_task_failure(self, mock_client_class, mock_sleep):
+        """Submit succeeds, but task processing fails -> down."""
+        from monitoring.services.checker import check_service
+
+        mock_submit_response = MagicMock()
+        mock_submit_response.status_code = 202
+        mock_submit_response.json.return_value = {"task_id": "abc-456"}
+
+        mock_poll_response = MagicMock()
+        mock_poll_response.status_code = 200
+        mock_poll_response.json.return_value = {
+            "state": "FAILURE",
+            "error": "ElasticSearch connection failed",
+        }
+
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.request.return_value = mock_submit_response
+        mock_client.get.return_value = mock_poll_response
+        mock_client_class.return_value = mock_client
+
+        result = check_service(self.LINKER_CONFIG)
+
+        assert result.status == "down"
+        assert "Phase 2: task failed" in result.error_message
+        assert "ElasticSearch" in result.error_message
+
+    @patch("monitoring.services.checker.time.sleep")
+    @patch("monitoring.services.checker.httpx.Client")
+    def test_two_phase_timeout(self, mock_client_class, mock_sleep):
+        """Submit succeeds, but task stays PENDING until polling exhausted -> down."""
+        from monitoring.services.checker import check_service
+
+        mock_submit_response = MagicMock()
+        mock_submit_response.status_code = 202
+        mock_submit_response.json.return_value = {"task_id": "abc-789"}
+
+        mock_poll_response = MagicMock()
+        mock_poll_response.status_code = 200
+        mock_poll_response.json.return_value = {"state": "PENDING"}
+
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.request.return_value = mock_submit_response
+        mock_client.get.return_value = mock_poll_response
+        mock_client_class.return_value = mock_client
+
+        result = check_service(self.LINKER_CONFIG)
+
+        assert result.status == "down"
+        assert "timeout" in result.error_message.lower()
+
+    @patch("monitoring.services.checker.httpx.Client")
+    def test_two_phase_submit_wrong_status(self, mock_client_class):
+        """Submit returns wrong status code (not 202) -> down immediately."""
+        from monitoring.services.checker import check_service
+
+        mock_submit_response = MagicMock()
+        mock_submit_response.status_code = 500
+
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.request.return_value = mock_submit_response
+        mock_client_class.return_value = mock_client
+
+        result = check_service(self.LINKER_CONFIG)
+
+        assert result.status == "down"
+        assert "Phase 1 failed" in result.error_message
+        assert result.status_code == 500
+
+    @patch("monitoring.services.checker.httpx.Client")
+    def test_two_phase_no_task_id(self, mock_client_class):
+        """Submit returns 202 but no task_id in body -> down."""
+        from monitoring.services.checker import check_service
+
+        mock_submit_response = MagicMock()
+        mock_submit_response.status_code = 202
+        mock_submit_response.json.return_value = {"status": "queued"}  # No task_id
+
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.request.return_value = mock_submit_response
+        mock_client_class.return_value = mock_client
+
+        result = check_service(self.LINKER_CONFIG)
+
+        assert result.status == "down"
+        assert "no task_id" in result.error_message
+
+    @patch("monitoring.services.checker.time.sleep")
+    @patch("monitoring.services.checker.httpx.Client")
+    def test_two_phase_empty_result(self, mock_client_class, mock_sleep):
+        """Task succeeds but returns empty result -> down."""
+        from monitoring.services.checker import check_service
+
+        mock_submit_response = MagicMock()
+        mock_submit_response.status_code = 202
+        mock_submit_response.json.return_value = {"task_id": "abc-empty"}
+
+        mock_poll_response = MagicMock()
+        mock_poll_response.status_code = 200
+        mock_poll_response.json.return_value = {
+            "state": "SUCCESS",
+            "result": None,
+        }
+
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.request.return_value = mock_submit_response
+        mock_client.get.return_value = mock_poll_response
+        mock_client_class.return_value = mock_client
+
+        result = check_service(self.LINKER_CONFIG)
+
+        assert result.status == "down"
+        assert "empty result" in result.error_message
+
+    @patch("monitoring.services.checker.httpx.Client")
+    def test_two_phase_connection_error(self, mock_client_class):
+        """Connection error during submit -> down."""
+        from monitoring.services.checker import check_service
+
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.request.side_effect = httpx.ConnectError("Connection refused")
+        mock_client_class.return_value = mock_client
+
+        result = check_service(self.LINKER_CONFIG)
+
+        assert result.status == "down"
+        assert "Connection error" in result.error_message
+

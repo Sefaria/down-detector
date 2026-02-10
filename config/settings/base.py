@@ -133,8 +133,14 @@ MONITORED_SERVICES = [
         "method": "POST",
         "expected_status": 202,
         "timeout": 15,
-        "request_body": {"text": {"title": "", "body": "Job 1:1"}},
-    }
+        "check_type": "async_two_phase",
+        "request_body": {"text": {"title": "", "body": "Genesis 1:1"}},
+        "async_verification": {
+            "base_url": "https://www.sefaria.org/api/async/",
+            "max_poll_attempts": 10,
+            "poll_interval": 1,
+        },
+    },
 ]
 
 # Check interval in seconds
