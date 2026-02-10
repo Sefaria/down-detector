@@ -121,20 +121,20 @@ MONITORED_SERVICES = [
         "follow_redirects": True,
     },
     {
+        "name": "MCP Server",
+        "url": env("MCP_HEALTH_URL", default="https://mcp.sefaria.org/healthz"),
+        "method": "GET",
+        "expected_status": 200,
+        "timeout": 5,
+    },
+    {
         "name": "Linker",
         "url": env("LINKER_HEALTH_URL", default="https://www.sefaria.org/api/find-refs"),
         "method": "POST",
         "expected_status": 202,
         "timeout": 15,
         "request_body": {"text": {"title": "", "body": "Job 1:1"}},
-    },
-    # {
-    #     "name": "MCP Server",
-    #     "url": env("MCP_HEALTH_URL", default="https://mcp.sefaria.org/healthz"),
-    #     "method": "GET",
-    #     "expected_status": 200,
-    #     "timeout": 5,
-    # },
+    }
 ]
 
 # Check interval in seconds
