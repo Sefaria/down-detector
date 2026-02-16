@@ -128,6 +128,13 @@ MONITORED_SERVICES = [
         "timeout": 5,
     },
     {
+        "name": "AI Chatbot",
+        "url": env("AI_CHATBOT_HEALTH_URL", default="https://chat-dev.sefaria.org/api/health"),
+        "method": "GET",
+        "expected_status": 200,
+        "timeout": 10,
+    },
+    {
         "name": "Linker",
         "url": env("LINKER_HEALTH_URL", default="https://www.sefaria.org/api/find-refs"),
         "method": "POST",

@@ -8,7 +8,7 @@ Real-time uptime monitoring system for Sefaria's critical services.
 
 ## Features
 
-- **Health Checking**: Periodic HTTP checks with configurable retries
+- **Health Checking**: Periodic HTTP checks with configurable retries (sefaria.org, MCP Server, AI Chatbot)
 - **Async E2E Verification**: Two-phase check for the Linker API — verifies task submission *and* successful processing
 - **State Tracking**: Detects UP/DOWN transitions to prevent alert storms
 - **Slack Alerts**: Block Kit formatted notifications on state changes
@@ -83,6 +83,12 @@ MONITORED_SERVICES = [
         "url": "https://www.sefaria.org/healthz",
         "method": "GET",
         "follow_redirects": True,
+        "expected_status": 200,
+    },
+    {
+        "name": "AI Chatbot",
+        "url": "https://chat-dev.sefaria.org/api/health",
+        "method": "GET",
         "expected_status": 200,
     },
     {
