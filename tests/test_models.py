@@ -46,19 +46,18 @@ class TestHealthCheckModel:
 
     def test_healthcheck_indexes_exist(self):
         """Composite index exists on service_name + checked_at."""
-        # Get index names from the database (PostgreSQL-compatible)
+        # Use Django's database-agnostic introspection (works on both SQLite and PostgreSQL)
         with connection.cursor() as cursor:
-            cursor.execute(
-                """
-                SELECT indexname FROM pg_indexes 
-                WHERE tablename = 'monitoring_healthcheck'
-                """
-            )
-            indexes = [row[0] for row in cursor.fetchall()]
+            constraints = connection.introspection.get_constraints(cursor, "monitoring_healthcheck")
 
-        # Check that our custom indexes exist (Django auto-names them)
-        index_names = " ".join(indexes)
-        assert "service_name" in index_names or "monitoring_health" in index_names
+        # Find indexes that include service_name
+        indexed_columns = [
+            cols["columns"]
+            for cols in constraints.values()
+            if cols.get("index") and "service_name" in cols["columns"]
+        ]
+
+        assert len(indexed_columns) > 0, "No index found containing service_name"
 
     def test_healthcheck_factory(self):
         """HealthCheckFactory creates valid instances."""
