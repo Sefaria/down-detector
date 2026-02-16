@@ -8,10 +8,10 @@ Real-time uptime monitoring system for Sefaria's critical services.
 
 ## Features
 
-- **Health Checking**: Periodic HTTP checks with configurable retries (sefaria.org, MCP Server, AI Chatbot)
+- **Health Checking**: Parallel HTTP checks with configurable retries (sefaria.org, MCP Server, AI Chatbot)
 - **Async E2E Verification**: Two-phase check for the Linker API — verifies task submission *and* successful processing
 - **State Tracking**: Detects UP/DOWN transitions to prevent alert storms
-- **Slack Alerts**: Block Kit formatted notifications on state changes
+- **Slack Alerts**: Block Kit notifications on state changes, with downtime duration on recovery
 - **Status Page**: Public dashboard at `status.sefaria.org` with 60s auto-refresh
 - **Scheduled Cleanup**: Automatic daily purging of old records at 3 AM UTC
 
