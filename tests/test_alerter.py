@@ -198,3 +198,84 @@ class TestProcessTransitionsWithAlerts:
         process_transitions_with_alerts(transitions)
         
         assert mock_send_alert.call_count == 2
+
+
+class TestDowntimeDuration:
+    """Tests for downtime duration in recovery alerts."""
+
+    def test_recovery_alert_includes_downtime_field(self):
+        """Recovery alert Block Kit payload contains a Downtime field."""
+        from monitoring.services.alerter import _build_recovery_alert
+
+        result = HealthCheckResult(
+            service_name="test-service",
+            status="up",
+            response_time_ms=150,
+            status_code=200,
+            error_message="",
+        )
+
+        with patch("monitoring.services.alerter._get_downtime_duration", return_value="5m 30s"):
+            with patch("monitoring.services.alerter.settings") as mock_settings:
+                mock_settings.STATUS_PAGE_URL = "https://status.sefaria.org"
+                blocks = _build_recovery_alert(result)
+
+        # Find the section block and check for Downtime field
+        section = next(b for b in blocks if b["type"] == "section")
+        field_texts = [f["text"] for f in section["fields"]]
+        assert any("*Downtime:*" in t for t in field_texts)
+        assert any("5m 30s" in t for t in field_texts)
+
+    def test_downtime_duration_formats_minutes_and_seconds(self):
+        """Duration under 1 hour shows minutes and seconds."""
+        from monitoring.services.alerter import _get_downtime_duration
+        from monitoring.models import HealthCheck
+
+        now = timezone.now()
+        # Create 3 consecutive down records spanning 5 minutes
+        HealthCheck.objects.create(
+            service_name="fmt-test",
+            status="up",
+            checked_at=now - timezone.timedelta(minutes=10),
+        )
+        HealthCheck.objects.create(
+            service_name="fmt-test",
+            status="down",
+            checked_at=now - timezone.timedelta(minutes=5),
+        )
+        HealthCheck.objects.create(
+            service_name="fmt-test",
+            status="down",
+            checked_at=now - timezone.timedelta(minutes=3),
+        )
+
+        duration = _get_downtime_duration("fmt-test")
+        assert "m" in duration
+        assert "h" not in duration
+
+    def test_downtime_duration_formats_hours(self):
+        """Duration over 1 hour shows hours and minutes."""
+        from monitoring.services.alerter import _get_downtime_duration
+        from monitoring.models import HealthCheck
+
+        now = timezone.now()
+        HealthCheck.objects.create(
+            service_name="hours-test",
+            status="up",
+            checked_at=now - timezone.timedelta(hours=3),
+        )
+        HealthCheck.objects.create(
+            service_name="hours-test",
+            status="down",
+            checked_at=now - timezone.timedelta(hours=2),
+        )
+
+        duration = _get_downtime_duration("hours-test")
+        assert "h" in duration
+
+    def test_downtime_duration_unknown_when_no_records(self):
+        """Returns 'Unknown' when no down records exist."""
+        from monitoring.services.alerter import _get_downtime_duration
+
+        duration = _get_downtime_duration("nonexistent-service")
+        assert duration == "Unknown"

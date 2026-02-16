@@ -113,10 +113,61 @@ def _build_down_alert(result: "HealthCheckResult") -> list[dict]:
     return blocks
 
 
+def _get_downtime_duration(service_name: str) -> str:
+    """
+    Calculate how long a service was down by finding the earliest
+    consecutive 'down' record before the current recovery.
+
+    Returns a human-readable duration string like '2h 15m' or '45m 30s'.
+    """
+    from monitoring.models import HealthCheck
+
+    # Get the most recent "down" record for this service
+    last_down = (
+        HealthCheck.objects
+        .filter(service_name=service_name, status="down")
+        .order_by("-checked_at")
+        .first()
+    )
+
+    if not last_down:
+        return "Unknown"
+
+    # Walk backwards through consecutive "down" records to find the start
+    down_records = (
+        HealthCheck.objects
+        .filter(service_name=service_name)
+        .order_by("-checked_at")
+    )
+
+    outage_start = last_down.checked_at
+    for record in down_records:
+        if record.status == "down":
+            outage_start = record.checked_at
+        else:
+            # Found the last "up" before the outage — stop here
+            break
+
+    now = timezone.now()
+    duration = now - outage_start
+
+    total_seconds = int(duration.total_seconds())
+    if total_seconds < 60:
+        return f"{total_seconds}s"
+
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+
+    if hours > 0:
+        return f"{hours}h {minutes}m"
+    return f"{minutes}m {seconds}s"
+
+
 def _build_recovery_alert(result: "HealthCheckResult") -> list[dict]:
     """Build Block Kit blocks for a service recovery alert."""
     status_page_url = getattr(settings, "STATUS_PAGE_URL", "https://status.sefaria.org")
     timestamp = timezone.now().strftime("%Y-%m-%d %H:%M:%S UTC")
+    downtime = _get_downtime_duration(result.service_name)
     
     blocks = [
         {
@@ -137,6 +188,10 @@ def _build_recovery_alert(result: "HealthCheckResult") -> list[dict]:
                 {
                     "type": "mrkdwn",
                     "text": f"*Recovered:*\n{timestamp}",
+                },
+                {
+                    "type": "mrkdwn",
+                    "text": f"*Downtime:*\n{downtime}",
                 },
                 {
                     "type": "mrkdwn",
