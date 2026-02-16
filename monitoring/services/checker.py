@@ -406,18 +406,62 @@ def _persist_result(result: HealthCheckResult) -> HealthCheck:
     )
 
 
+def _check_service_worker(
+    config: dict[str, Any], persist: bool
+) -> HealthCheckResult:
+    """
+    Worker function for parallel health checks.
+
+    Ensures Django DB connections are properly managed in worker threads.
+    """
+    from django.db import close_old_connections
+
+    close_old_connections()
+    try:
+        return check_service(config, persist=persist)
+    finally:
+        close_old_connections()
+
+
 def check_all_services(persist: bool = True) -> list[HealthCheckResult]:
     """
-    Check health of all configured services.
+    Check health of all configured services in parallel.
+
+    Uses ThreadPoolExecutor so a single slow/down service doesn't
+    block the entire check cycle. Each thread gets its own httpx
+    client and Django DB connection.
 
     Returns:
         List of HealthCheckResult for each service
     """
-    services = getattr(settings, "MONITORED_SERVICES", [])
-    results = []
+    from concurrent.futures import ThreadPoolExecutor, as_completed
 
-    for config in services:
-        result = check_service(config, persist=persist)
-        results.append(result)
+    services = getattr(settings, "MONITORED_SERVICES", [])
+    if not services:
+        return []
+
+    results: list[HealthCheckResult] = [None] * len(services)  # type: ignore[list-item]
+
+    with ThreadPoolExecutor(max_workers=len(services)) as executor:
+        future_to_index = {
+            executor.submit(_check_service_worker, config, persist): i
+            for i, config in enumerate(services)
+        }
+
+        for future in as_completed(future_to_index):
+            idx = future_to_index[future]
+            try:
+                results[idx] = future.result()
+            except Exception as e:
+                # If a worker raises unexpectedly, record it as down
+                service_name = services[idx].get("name", f"service-{idx}")
+                logger.exception(f"Unexpected error in parallel check for {service_name}")
+                results[idx] = HealthCheckResult(
+                    service_name=service_name,
+                    status="down",
+                    response_time_ms=None,
+                    status_code=None,
+                    error_message=f"Worker error: {e}",
+                )
 
     return results
