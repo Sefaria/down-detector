@@ -279,3 +279,52 @@ class TestDowntimeDuration:
 
         duration = _get_downtime_duration("nonexistent-service")
         assert duration == "Unknown"
+
+    def test_downtime_duration_with_recovery_record_already_persisted(self):
+        """Regression: recovery 'up' record in DB should not break the calculation.
+
+        In production, the recovery HealthCheck is persisted BEFORE
+        _get_downtime_duration is called. The old code walked backwards
+        through all records and immediately broke on the new 'up' record,
+        yielding an incorrect (too short) downtime.
+        """
+        from monitoring.services.alerter import _get_downtime_duration
+        from monitoring.models import HealthCheck
+
+        now = timezone.now()
+        # Sequence: up -> down -> down -> down -> up (recovery already saved)
+        HealthCheck.objects.create(
+            service_name="regression-test",
+            status="up",
+            checked_at=now - timezone.timedelta(minutes=15),
+        )
+        HealthCheck.objects.create(
+            service_name="regression-test",
+            status="down",
+            checked_at=now - timezone.timedelta(minutes=10),
+        )
+        HealthCheck.objects.create(
+            service_name="regression-test",
+            status="down",
+            checked_at=now - timezone.timedelta(minutes=7),
+        )
+        HealthCheck.objects.create(
+            service_name="regression-test",
+            status="down",
+            checked_at=now - timezone.timedelta(minutes=4),
+        )
+        # Recovery record already persisted (this is the key scenario)
+        HealthCheck.objects.create(
+            service_name="regression-test",
+            status="up",
+            checked_at=now - timezone.timedelta(seconds=30),
+        )
+
+        duration = _get_downtime_duration("regression-test")
+        # Outage started 10 minutes ago, so duration should be ~10m, not ~4m or ~30s
+        assert "m" in duration
+        # Should be at least 9 minutes (accounting for test timing)
+        total_text = duration.replace("m", "").replace("s", "").strip()
+        parts = duration.split("m")
+        minutes_part = int(parts[0].strip())
+        assert minutes_part >= 9, f"Expected ≥9m but got {duration}"

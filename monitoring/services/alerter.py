@@ -133,20 +133,41 @@ def _get_downtime_duration(service_name: str) -> str:
     if not last_down:
         return "Unknown"
 
-    # Walk backwards through consecutive "down" records to find the start
-    down_records = (
+    # Find the last "up" record BEFORE the most recent down record.
+    # This tells us when the outage actually started.
+    last_up_before_outage = (
         HealthCheck.objects
-        .filter(service_name=service_name)
+        .filter(
+            service_name=service_name,
+            status="up",
+            checked_at__lt=last_down.checked_at,
+        )
         .order_by("-checked_at")
+        .first()
     )
 
-    outage_start = last_down.checked_at
-    for record in down_records:
-        if record.status == "down":
-            outage_start = record.checked_at
-        else:
-            # Found the last "up" before the outage — stop here
-            break
+    if last_up_before_outage:
+        # The outage started with the first "down" record after the last "up"
+        first_down = (
+            HealthCheck.objects
+            .filter(
+                service_name=service_name,
+                status="down",
+                checked_at__gt=last_up_before_outage.checked_at,
+            )
+            .order_by("checked_at")
+            .first()
+        )
+        outage_start = first_down.checked_at if first_down else last_down.checked_at
+    else:
+        # No "up" record found before the outage — use the earliest "down"
+        earliest_down = (
+            HealthCheck.objects
+            .filter(service_name=service_name, status="down")
+            .order_by("checked_at")
+            .first()
+        )
+        outage_start = earliest_down.checked_at if earliest_down else last_down.checked_at
 
     now = timezone.now()
     duration = now - outage_start
