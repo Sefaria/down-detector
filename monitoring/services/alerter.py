@@ -64,10 +64,53 @@ def send_alert(result: "HealthCheckResult", transition: str) -> bool:
         return False
 
 
+def _get_outage_start_time(service_name: str) -> str:
+    """
+    Find when the current outage started by querying the DB for the
+    first consecutive 'down' record after the last 'up' record.
+
+    Returns a formatted timestamp string.
+    """
+    from monitoring.models import HealthCheck
+
+    last_up = (
+        HealthCheck.objects
+        .filter(service_name=service_name, status="up")
+        .order_by("-checked_at")
+        .first()
+    )
+
+    if last_up:
+        first_down = (
+            HealthCheck.objects
+            .filter(
+                service_name=service_name,
+                status="down",
+                checked_at__gt=last_up.checked_at,
+            )
+            .order_by("checked_at")
+            .first()
+        )
+        if first_down:
+            return first_down.checked_at.strftime("%Y-%m-%d %H:%M:%S UTC")
+    else:
+        # No 'up' record at all — use the earliest 'down'
+        earliest_down = (
+            HealthCheck.objects
+            .filter(service_name=service_name, status="down")
+            .order_by("checked_at")
+            .first()
+        )
+        if earliest_down:
+            return earliest_down.checked_at.strftime("%Y-%m-%d %H:%M:%S UTC")
+
+    return timezone.now().strftime("%Y-%m-%d %H:%M:%S UTC")
+
+
 def _build_down_alert(result: "HealthCheckResult") -> list[dict]:
     """Build Block Kit blocks for a service down alert."""
     status_page_url = getattr(settings, "STATUS_PAGE_URL", "https://status.sefaria.org")
-    timestamp = timezone.now().strftime("%Y-%m-%d %H:%M:%S UTC")
+    timestamp = _get_outage_start_time(result.service_name)
     
     blocks = [
         {

@@ -200,6 +200,47 @@ class TestProcessTransitionsWithAlerts:
         assert mock_send_alert.call_count == 2
 
 
+class TestOutageStartTime:
+    """Tests for _get_outage_start_time used in down alerts."""
+
+    def test_outage_start_time_finds_first_down_after_last_up(self):
+        """Since time should be the first 'down' record after the last 'up'."""
+        from monitoring.services.alerter import _get_outage_start_time
+        from monitoring.models import HealthCheck
+
+        now = timezone.now()
+        HealthCheck.objects.create(
+            service_name="start-test",
+            status="up",
+            checked_at=now - timezone.timedelta(minutes=5),
+        )
+        HealthCheck.objects.create(
+            service_name="start-test",
+            status="down",
+            checked_at=now - timezone.timedelta(minutes=3),
+        )
+        HealthCheck.objects.create(
+            service_name="start-test",
+            status="down",
+            checked_at=now - timezone.timedelta(minutes=2),
+        )
+
+        result = _get_outage_start_time("start-test")
+        # Should contain the timestamp from 3 minutes ago, not 2 or now
+        expected_time = (now - timezone.timedelta(minutes=3)).strftime(
+            "%Y-%m-%d %H:%M"
+        )
+        assert expected_time in result
+
+    def test_outage_start_time_fallback_when_no_records(self):
+        """Returns current time when no records exist."""
+        from monitoring.services.alerter import _get_outage_start_time
+
+        result = _get_outage_start_time("nonexistent-service")
+        # Should be a valid timestamp string
+        assert "UTC" in result
+
+
 class TestDowntimeDuration:
     """Tests for downtime duration in recovery alerts."""
 
