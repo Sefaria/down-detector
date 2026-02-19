@@ -188,20 +188,39 @@ header .subtitle {
 }
 
 .status-quote {
-    font-size: 0.85rem;
-    font-style: italic;
-    color: var(--text-secondary);
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
     line-height: 1.4;
 }
 
-.status-quote a {
+.quote-hebrew {
+    font-size: 1.05rem;
+    font-weight: 500;
+    direction: rtl;
+    text-align: right;
     color: var(--sefaria-gold);
-    text-decoration: none;
     font-style: normal;
-    font-size: 0.8rem;
+    letter-spacing: 0.01em;
 }
 
-.status-quote a:hover {
+.quote-english {
+    font-size: 0.85rem;
+    font-style: italic;
+    color: var(--text-secondary);
+}
+
+.quote-source {
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-style: normal;
+    font-size: 0.75rem;
+    opacity: 0.7;
+    transition: opacity 0.15s;
+}
+
+.quote-source:hover {
+    opacity: 1;
     text-decoration: underline;
 }
 

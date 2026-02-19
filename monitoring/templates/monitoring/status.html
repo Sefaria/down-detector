@@ -79,11 +79,23 @@
             <div class="status-info">
                 <span class="status-text">{{ status_label }}</span>
                 {% if overall_status == 'operational' %}
-                <span class="status-quote">"The Guardian of Israel neither slumbers nor sleeps." — <a href="https://www.sefaria.org/Psalms.121.4" target="_blank" rel="noopener">Psalms 121:4</a></span>
+                <div class="status-quote">
+                    <span class="quote-hebrew" lang="he">הִנֵּה לֹא־יָנוּם וְלֹא יִישָׁן שׁוֹמֵר יִשְׂרָאֵל</span>
+                    <span class="quote-english">"The Guardian of Israel neither slumbers nor sleeps."</span>
+                    <a class="quote-source" href="https://www.sefaria.org/Psalms.121.4" target="_blank" rel="noopener">Psalms 121:4</a>
+                </div>
                 {% elif overall_status == 'partial' %}
-                <span class="status-quote">"Seven times the righteous falls and rises again." — <a href="https://www.sefaria.org/Proverbs.24.16" target="_blank" rel="noopener">Proverbs 24:16</a></span>
+                <div class="status-quote">
+                    <span class="quote-hebrew" lang="he">כִּי שֶׁבַע יִפּוֹל צַדִּיק וָקָם</span>
+                    <span class="quote-english">"Seven times the righteous falls and rises again."</span>
+                    <a class="quote-source" href="https://www.sefaria.org/Proverbs.24.16" target="_blank" rel="noopener">Proverbs 24:16</a>
+                </div>
                 {% elif overall_status == 'major' %}
-                <span class="status-quote">"It is not your duty to finish the work, but neither are you at liberty to neglect it." — <a href="https://www.sefaria.org/Pirkei_Avot.2.16" target="_blank" rel="noopener">Pirkei Avot 2:16</a></span>
+                <div class="status-quote">
+                    <span class="quote-hebrew" lang="he">לֹא עָלֶיךָ הַמְּלָאכָה לִגְמֹר, וְלֹא אַתָּה בֶן חוֹרִין לִבָּטֵל מִמֶּנָּה</span>
+                    <span class="quote-english">"It is not your duty to finish the work, but neither are you at liberty to neglect it."</span>
+                    <a class="quote-source" href="https://www.sefaria.org/Pirkei_Avot.2.16" target="_blank" rel="noopener">Pirkei Avot 2:16</a>
+                </div>
                 {% endif %}
                 <span class="last-updated">Last checked: <time id="last-checked">just now</time></span>
             </div>
