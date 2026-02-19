@@ -50,6 +50,7 @@ docker-compose.override.yml
 .vscode/
 *.swp
 *.swo
+.claude
 
 # Testing
 .coverage
