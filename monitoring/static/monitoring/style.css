@@ -187,6 +187,24 @@ header .subtitle {
     color: var(--status-down);
 }
 
+.status-quote {
+    font-size: 0.85rem;
+    font-style: italic;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
+.status-quote a {
+    color: var(--sefaria-gold);
+    text-decoration: none;
+    font-style: normal;
+    font-size: 0.8rem;
+}
+
+.status-quote a:hover {
+    text-decoration: underline;
+}
+
 .last-updated {
     font-size: 0.8rem;
     color: var(--text-secondary);

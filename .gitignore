@@ -51,6 +51,7 @@ docker-compose.override.yml
 *.swp
 *.swo
 .claude
+CLAUDE.md
 
 # Testing
 .coverage
