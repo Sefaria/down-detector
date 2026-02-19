@@ -13,33 +13,61 @@ from monitoring.models import HealthCheck, Message
 
 def get_service_statuses() -> list[dict]:
     """
-    Get the latest status for each monitored service.
-    
+    Get the confirmed status for each monitored service.
+
+    A service is shown as "down" only if the last N checks all failed,
+    where N is the service's ``failure_threshold`` (same threshold used
+    for Slack alerts).  This prevents brief blips from flashing red on
+    the public status page.
+
     Returns list of dicts with service info and status.
     """
     services = getattr(settings, "MONITORED_SERVICES", [])
+    default_threshold = getattr(
+        settings, "ALERT_AFTER_CONSECUTIVE_FAILURES", 2
+    )
     statuses = []
-    
+
     for config in services:
         service_name = config["name"]
-        
-        # Get the latest health check for this service
-        latest_check = (
+        threshold = config.get("failure_threshold", default_threshold)
+
+        # Get the last N health checks for this service
+        recent_checks = list(
             HealthCheck.objects
             .filter(service_name=service_name)
-            .order_by("-checked_at")
-            .first()
+            .order_by("-checked_at")[:threshold]
         )
-        
+
+        if not recent_checks:
+            statuses.append({
+                "name": service_name,
+                "status": "unknown",
+                "response_time_ms": None,
+                "last_checked": None,
+                "status_code": None,
+                "error_message": "",
+            })
+            continue
+
+        latest_check = recent_checks[0]
+
+        # Service is "down" only if ALL of the last N checks failed
+        all_down = (
+            len(recent_checks) >= threshold
+            and all(c.status == "down" for c in recent_checks)
+        )
+        confirmed_status = "down" if all_down else "up"
+
         statuses.append({
             "name": service_name,
-            "status": latest_check.status if latest_check else "unknown",
-            "response_time_ms": latest_check.response_time_ms if latest_check else None,
-            "last_checked": latest_check.checked_at if latest_check else None,
-            "status_code": latest_check.status_code if latest_check else None,
-            "error_message": latest_check.error_message if latest_check else "",
+            "status": confirmed_status,
+            "response_time_ms": latest_check.response_time_ms,
+            "last_checked": latest_check.checked_at,
+            "status_code": latest_check.status_code,
+            "error_message": latest_check.error_message if all_down else "",
         })
-    
+
     return statuses
 
 

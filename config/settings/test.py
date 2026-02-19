@@ -34,5 +34,6 @@ MONITORED_SERVICES = [
         "method": "GET",
         "expected_status": 200,
         "timeout": 5,
+        "failure_threshold": 2,
     },
 ]

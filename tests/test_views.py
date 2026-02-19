@@ -69,15 +69,29 @@ class TestStatusPageLogic:
         assert "All Systems Operational" in content
 
     def test_service_down_shows_outage(self, client, settings):
-        """When a service is down, shows outage status."""
-        # Create one service down
-        HealthCheckFactory(
-            service_name=settings.MONITORED_SERVICES[0]["name"],
-            status="down",
-        )
-        
+        """When a service is confirmed down (threshold met), shows outage."""
+        service_name = settings.MONITORED_SERVICES[0]["name"]
+        threshold = settings.MONITORED_SERVICES[0].get("failure_threshold", 2)
+
+        # Create enough consecutive failures to meet the threshold
+        for _ in range(threshold):
+            HealthCheckFactory(service_name=service_name, status="down")
+
         response = client.get(reverse("monitoring:status"))
         content = response.content.decode()
-        
+
         # Either "Major Outage" or "Outage" should appear
         assert "Outage" in content
+
+    def test_single_failure_below_threshold_shows_operational(self, client, settings):
+        """A single failure below the threshold still shows operational."""
+        service_name = settings.MONITORED_SERVICES[0]["name"]
+
+        # Create one up then one down — below threshold of 2
+        HealthCheckFactory(service_name=service_name, status="up")
+        HealthCheckFactory(service_name=service_name, status="down")
+
+        response = client.get(reverse("monitoring:status"))
+        content = response.content.decode()
+
+        assert "All Systems Operational" in content
