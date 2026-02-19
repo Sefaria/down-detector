@@ -8,10 +8,11 @@ Real-time uptime monitoring system for Sefaria's critical services.
 
 ## Features
 
-- **Health Checking**: Parallel HTTP checks with configurable retries (sefaria.org, MCP Server, AI Chatbot)
-- **Async E2E Verification**: Two-phase check for the Linker API — verifies task submission *and* successful processing
+- **Health Checking**: Parallel HTTP checks with configurable retries (sefaria.org, MCP Server, AI Chatbot, Linker)
+- **Async E2E Verification**: Two-phase check for the Linker API — verifies task submission *and* successful processing, with retries
+- **Consecutive Failure Threshold**: Per-service configurable threshold — requires N consecutive failed check cycles before alerting, filtering brief blips
 - **State Tracking**: Detects UP/DOWN transitions to prevent alert storms
-- **Slack Alerts**: Block Kit notifications on state changes, with downtime duration on recovery
+- **Slack Alerts**: Block Kit notifications on confirmed outages, with accurate outage start time and downtime duration on recovery
 - **Status Page**: Public dashboard at `status.sefaria.org` with 60s auto-refresh
 - **Scheduled Cleanup**: Automatic daily purging of old records at 3 AM UTC
 
@@ -69,8 +70,10 @@ docker compose logs -f scheduler
 | `SLACK_CHANNEL` | Alert channel name | `sefaria-down` |
 | `STATUS_PAGE_URL` | Public status page URL | - |
 | `HEALTH_CHECK_INTERVAL` | Check frequency (seconds) | `60` |
-| `HEALTH_CHECK_RETRIES` | Retry attempts | `3` |
-| `HEALTH_CHECK_RETENTION_DAYS` | Days to keep records | `30` |
+| `HEALTH_CHECK_RETRIES` | Retry attempts per check | `3` |
+| `HEALTH_CHECK_RETRY_DELAY` | Delay between retries (seconds) | `10` |
+| `ALERT_AFTER_CONSECUTIVE_FAILURES` | Default consecutive failures before alerting | `2` |
+| `HEALTH_CHECK_RETENTION_DAYS` | Days to keep records | `60` |
 
 ### Monitored Services
 
@@ -84,12 +87,19 @@ MONITORED_SERVICES = [
         "method": "GET",
         "follow_redirects": True,
         "expected_status": 200,
+        "failure_threshold": 2,  # alert after 2 consecutive failed cycles
+    },
+    {
+        "name": "MCP Server",
+        "url": "https://mcp.sefaria.org/healthz",
+        "expected_status": 200,
+        "failure_threshold": 2,
     },
     {
         "name": "AI Chatbot",
         "url": "https://chat-dev.sefaria.org/api/health",
-        "method": "GET",
         "expected_status": 200,
+        "failure_threshold": 2,
     },
     {
         "name": "Linker",
@@ -97,6 +107,7 @@ MONITORED_SERVICES = [
         "method": "POST",
         "expected_status": 202,
         "check_type": "async_two_phase",
+        "failure_threshold": 3,  # noisiest service, higher threshold
         "request_body": {"text": {"title": "", "body": "Job 1:1"}},
         "async_verification": {
             "base_url": "https://www.sefaria.org/api/async/",
@@ -104,9 +115,10 @@ MONITORED_SERVICES = [
             "poll_interval": 1,
         },
     },
-    # ...
 ]
 ```
+
+Each service's `failure_threshold` sets how many consecutive failed check cycles are required before a DOWN alert is sent to Slack. This filters brief blips that self-resolve. Recovery alerts always fire immediately on the first successful check. Falls back to `ALERT_AFTER_CONSECUTIVE_FAILURES` (default 2) if not set per service.
 
 ## Management Commands
 
