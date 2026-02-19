@@ -91,7 +91,9 @@ def check_service(
     check_type = config.get("check_type", "standard")
 
     if check_type == "async_two_phase":
-        result = _check_async_two_phase(config)
+        result = _check_async_two_phase_with_retry(
+            config, max_retries=max_retries, retry_delay=retry_delay
+        )
     else:
         url = config["url"]
         method = config.get("method", "GET")
@@ -116,6 +118,41 @@ def check_service(
         _persist_result(result)
 
     return result
+
+
+def _check_async_two_phase_with_retry(
+    config: dict[str, Any],
+    max_retries: int,
+    retry_delay: float,
+) -> HealthCheckResult:
+    """
+    Run async two-phase check with retries.
+
+    Each retry starts a fresh task (new POST, new task_id, new polling).
+    Returns immediately on the first successful attempt.
+    """
+    service_name = config["name"]
+    last_result: HealthCheckResult | None = None
+
+    for attempt in range(max_retries):
+        result = _check_async_two_phase(config)
+        if result.is_up:
+            return result
+
+        last_result = result
+        logger.warning(
+            f"Async two-phase check failed for {service_name} "
+            f"(attempt {attempt + 1}/{max_retries}): {result.error_message}"
+        )
+
+        if attempt < max_retries - 1:
+            time.sleep(retry_delay)
+
+    logger.error(
+        f"Async two-phase check failed for {service_name} "
+        f"after {max_retries} attempts"
+    )
+    return last_result  # type: ignore[return-value]
 
 
 def _check_async_two_phase(config: dict[str, Any]) -> HealthCheckResult:
