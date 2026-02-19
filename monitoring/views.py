@@ -1,6 +1,8 @@
 """
 Views for the status page.
 """
+import random
+
 from django.conf import settings
 from django.db.models import Max
 from django.http import HttpResponse
@@ -9,6 +11,108 @@ from django.shortcuts import render
 from django.urls import reverse
 
 from monitoring.models import HealthCheck, Message
+
+
+# -- Status-page quotes (Hebrew, English, Sefaria ref, display source) ------
+
+QUOTES_OPERATIONAL = [
+    {
+        "hebrew": "הִנֵּה לֹא־יָנוּם וְלֹא יִישָׁן שׁוֹמֵר יִשְׂרָאֵל",
+        "english": "The Guardian of Israel neither slumbers nor sleeps.",
+        "ref": "Psalms.121.4",
+        "source": "Psalms 121:4",
+    },
+    {
+        "hebrew": "וַיַּרְא אֱלֹהִים אֶת־כׇּל־אֲשֶׁר עָשָׂה וְהִנֵּה־טוֹב מְאֹד",
+        "english": "And God saw all that He had made, and behold, it was very good.",
+        "ref": "Genesis.1.31",
+        "source": "Genesis 1:31",
+    },
+    {
+        "hebrew": "כִּי־יָשָׁר דְּבַר־יְהֹוָה וְכׇל־מַעֲשֵׂהוּ בֶּאֱמוּנָה",
+        "english": "For the word of the Lord is right, and all His work is done in faithfulness.",
+        "ref": "Psalms.33.4",
+        "source": "Psalms 33:4",
+    },
+    {
+        "hebrew": "נֵר־לְרַגְלִי דְבָרֶךָ וְאוֹר לִנְתִיבָתִי",
+        "english": "Your word is a lamp to my feet, and a light to my path.",
+        "ref": "Psalms.119.105",
+        "source": "Psalms 119:105",
+    },
+    {
+        "hebrew": "יְהֹוָה יִשְׁמׇר־צֵאתְךָ וּבוֹאֶךָ מֵעַתָּה וְעַד־עוֹלָם",
+        "english": "The Lord will guard your going out and coming in, from now and forever.",
+        "ref": "Psalms.121.8",
+        "source": "Psalms 121:8",
+    },
+]
+
+QUOTES_PARTIAL = [
+    {
+        "hebrew": "כִּי שֶׁבַע יִפּוֹל צַדִּיק וָקָם",
+        "english": "Seven times the righteous falls and rises again.",
+        "ref": "Proverbs.24.16",
+        "source": "Proverbs 24:16",
+    },
+    {
+        "hebrew": "כִּי נָפַלְתִּי קָמְתִּי כִּי־אֵשֵׁב בַּחֹשֶׁךְ יְהֹוָה אוֹר לִי",
+        "english": "When I fall, I shall arise; when I sit in darkness, the Lord is a light unto me.",
+        "ref": "Micah.7.8",
+        "source": "Micah 7:8",
+    },
+    {
+        "hebrew": "בָּעֶרֶב יָלִין בֶּכִי וְלַבֹּקֶר רִנָּה",
+        "english": "Weeping may tarry for the night, but joy comes in the morning.",
+        "ref": "Psalms.30.6",
+        "source": "Psalms 30:6",
+    },
+    {
+        "hebrew": "וְקוֹיֵ יְהֹוָה יַחֲלִיפוּ כֹחַ יַעֲלוּ אֵבֶר כַּנְּשָׁרִים",
+        "english": "They that wait upon the Lord shall renew their strength; they shall mount up with wings as eagles.",
+        "ref": "Isaiah.40.31",
+        "source": "Isaiah 40:31",
+    },
+]
+
+QUOTES_MAJOR = [
+    {
+        "hebrew": "לֹא עָלֶיךָ הַמְּלָאכָה לִגְמֹר, וְלֹא אַתָּה בֶן חוֹרִין לִבָּטֵל מִמֶּנָּה",
+        "english": "It is not your duty to finish the work, but neither are you at liberty to neglect it.",
+        "ref": "Pirkei_Avot.2.16",
+        "source": "Pirkei Avot 2:16",
+    },
+    {
+        "hebrew": "קַוֵּה אֶל־יְהֹוָה חֲזַק וְיַאֲמֵץ לִבֶּךָ וְקַוֵּה אֶל־יְהֹוָה",
+        "english": "Wait for the Lord; be strong and let your heart take courage.",
+        "ref": "Psalms.27.14",
+        "source": "Psalms 27:14",
+    },
+    {
+        "hebrew": "אַל־תִּירָא כִּי עִמְּךָ־אָנִי",
+        "english": "Fear not, for I am with you.",
+        "ref": "Isaiah.41.10",
+        "source": "Isaiah 41:10",
+    },
+    {
+        "hebrew": "וַיֹּאמֶר אֱלֹהִים יְהִי אוֹר וַיְהִי־אוֹר",
+        "english": "And God said: Let there be light — and there was light.",
+        "ref": "Genesis.1.3",
+        "source": "Genesis 1:3",
+    },
+]
+
+QUOTES_BY_STATUS = {
+    "operational": QUOTES_OPERATIONAL,
+    "partial": QUOTES_PARTIAL,
+    "major": QUOTES_MAJOR,
+}
+
+
+def get_random_quote(overall_status: str) -> dict:
+    """Pick a random quote appropriate for the current status."""
+    quotes = QUOTES_BY_STATUS.get(overall_status, QUOTES_OPERATIONAL)
+    return random.choice(quotes)
 
 
 def get_service_statuses() -> list[dict]:
@@ -125,13 +229,15 @@ def status_page(request):
     # Calculate overall status
     overall_status = get_overall_status(service_statuses, active_incidents)
     status_label = get_status_label(overall_status)
-    
+    quote = get_random_quote(overall_status)
+
     context = {
         "services": service_statuses,
         "active_incidents": active_incidents,
         "resolved_incidents": resolved_incidents,
         "overall_status": overall_status,
         "status_label": status_label,
+        "quote": quote,
     }
     
     return render(request, "monitoring/status.html", context)
