@@ -119,6 +119,7 @@ MONITORED_SERVICES = [
         "expected_status": 200,
         "timeout": 10,
         "follow_redirects": True,
+        "failure_threshold": 2,
     },
     {
         "name": "MCP Server",
@@ -126,6 +127,7 @@ MONITORED_SERVICES = [
         "method": "GET",
         "expected_status": 200,
         "timeout": 20,
+        "failure_threshold": 2,
     },
     {
         "name": "AI Chatbot",
@@ -133,6 +135,7 @@ MONITORED_SERVICES = [
         "method": "GET",
         "expected_status": 200,
         "timeout": 20,
+        "failure_threshold": 2,
     },
     {
         "name": "Linker",
@@ -147,6 +150,7 @@ MONITORED_SERVICES = [
             "max_poll_attempts": 10,
             "poll_interval": 1,
         },
+        "failure_threshold": 3,
     },
 ]
 
@@ -156,6 +160,9 @@ HEALTH_CHECK_INTERVAL = env.int("HEALTH_CHECK_INTERVAL", default=60)
 # Retry configuration
 HEALTH_CHECK_RETRIES = env.int("HEALTH_CHECK_RETRIES", default=3)
 HEALTH_CHECK_RETRY_DELAY = env.int("HEALTH_CHECK_RETRY_DELAY", default=10)
+
+# Consecutive failure threshold (default for services without per-service config)
+ALERT_AFTER_CONSECUTIVE_FAILURES = env.int("ALERT_AFTER_CONSECUTIVE_FAILURES", default=2)
 
 # Slack configuration
 SLACK_WEBHOOK_URL = env("SLACK_WEBHOOK_URL", default="")
