@@ -191,8 +191,8 @@ class TestProcessTransitionsWithAlerts:
         )
         
         transitions = [
-            (down_result, "went_down"),
-            (up_result, "recovered"),
+            (down_result, "went_down", None),
+            (up_result, "recovered", None),
         ]
         
         process_transitions_with_alerts(transitions)
@@ -266,6 +266,17 @@ class TestDowntimeDuration:
         field_texts = [f["text"] for f in section["fields"]]
         assert any("*Downtime:*" in t for t in field_texts)
         assert any("5m 30s" in t for t in field_texts)
+
+    def test_recovery_alert_uses_provided_outage_start(self):
+        """Recovery alert correctly uses an explicitly provided outage start time."""
+        from monitoring.services.alerter import _get_downtime_duration
+
+        # Outage start time given explicitly 2 hours ago
+        outage_start = timezone.now() - timezone.timedelta(hours=2)
+
+        # We don't even need to mock the DB, it shouldn't be touched if the start is provided
+        duration = _get_downtime_duration("test-service", known_outage_start=outage_start)
+        assert "2h 0m" in duration or "1h 59m" in duration
 
     def test_downtime_duration_formats_minutes_and_seconds(self):
         """Duration under 1 hour shows minutes and seconds."""

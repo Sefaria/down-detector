@@ -95,7 +95,7 @@ class TestStateTrackerInitialization:
 
         # Should be confirmed down — a recovery should trigger an alert
         result = _make_result("test-service", "up")
-        transition = tracker.update_and_get_transition(result)
+        transition, outage_start = tracker.update_and_get_transition(result)
         assert transition == "recovered"
 
 
@@ -118,7 +118,7 @@ class TestStateTransitionsWithThreshold:
         tracker.initialize()
 
         result = _make_result("test-service", "down")
-        transition = tracker.update_and_get_transition(result)
+        transition, outage_start = tracker.update_and_get_transition(result)
 
         assert transition is None
         # Internal state should still be "up" (not confirmed down)
@@ -141,11 +141,13 @@ class TestStateTransitionsWithThreshold:
 
         # First failure — no alert
         result1 = _make_result("test-service", "down")
-        assert tracker.update_and_get_transition(result1) is None
+        transition1, start1 = tracker.update_and_get_transition(result1)
+        assert transition1 is None
 
         # Second failure — alert!
         result2 = _make_result("test-service", "down")
-        assert tracker.update_and_get_transition(result2) == "went_down"
+        transition2, start2 = tracker.update_and_get_transition(result2)
+        assert transition2 == "went_down"
         assert tracker.get_state("test-service") == "down"
 
     @patch("monitoring.services.state.settings")
@@ -166,11 +168,13 @@ class TestStateTransitionsWithThreshold:
         # Failures 1 and 2 — no alert
         for _ in range(2):
             result = _make_result("linker-service", "down")
-            assert tracker.update_and_get_transition(result) is None
+            t, _ = tracker.update_and_get_transition(result)
+            assert t is None
 
         # Failure 3 — alert!
         result3 = _make_result("linker-service", "down")
-        assert tracker.update_and_get_transition(result3) == "went_down"
+        t, _ = tracker.update_and_get_transition(result3)
+        assert t == "went_down"
 
     @patch("monitoring.services.state.settings")
     def test_success_resets_failure_counter(self, mock_settings):
@@ -186,19 +190,22 @@ class TestStateTransitionsWithThreshold:
         tracker.initialize()
 
         # Fail once
-        assert tracker.update_and_get_transition(
+        t, _ = tracker.update_and_get_transition(
             _make_result("test-service", "down")
-        ) is None
+        )
+        assert t is None
 
         # Succeed (resets counter)
-        assert tracker.update_and_get_transition(
+        t, _ = tracker.update_and_get_transition(
             _make_result("test-service", "up")
-        ) is None
+        )
+        assert t is None
 
         # Fail once again — counter is back to 1, still below threshold
-        assert tracker.update_and_get_transition(
+        t, _ = tracker.update_and_get_transition(
             _make_result("test-service", "down")
-        ) is None
+        )
+        assert t is None
 
     @patch("monitoring.services.state.settings")
     def test_recovery_fires_immediately_after_confirmed_down(self, mock_settings):
@@ -218,7 +225,7 @@ class TestStateTransitionsWithThreshold:
         tracker.update_and_get_transition(_make_result("test-service", "down"))
 
         # First success — immediate recovery
-        transition = tracker.update_and_get_transition(
+        transition, outage_start = tracker.update_and_get_transition(
             _make_result("test-service", "up")
         )
         assert transition == "recovered"
@@ -238,11 +245,11 @@ class TestStateTransitionsWithThreshold:
         tracker.initialize()
 
         # Fail once
-        t1 = tracker.update_and_get_transition(
+        t1, _ = tracker.update_and_get_transition(
             _make_result("test-service", "down")
         )
         # Recover
-        t2 = tracker.update_and_get_transition(
+        t2, _ = tracker.update_and_get_transition(
             _make_result("test-service", "up")
         )
 
@@ -264,20 +271,15 @@ class TestStateTransitionsWithThreshold:
 
         # Confirm down
         tracker.update_and_get_transition(_make_result("test-service", "down"))
-        assert (
-            tracker.update_and_get_transition(_make_result("test-service", "down"))
-            == "went_down"
-        )
+        t, _ = tracker.update_and_get_transition(_make_result("test-service", "down"))
+        assert t == "went_down"
 
         # Further failures — no extra alerts
-        assert (
-            tracker.update_and_get_transition(_make_result("test-service", "down"))
-            is None
-        )
-        assert (
-            tracker.update_and_get_transition(_make_result("test-service", "down"))
-            is None
-        )
+        t, _ = tracker.update_and_get_transition(_make_result("test-service", "down"))
+        assert t is None
+        
+        t, _ = tracker.update_and_get_transition(_make_result("test-service", "down"))
+        assert t is None
 
     def test_first_check_for_new_service_no_transition(self):
         """First check for a new service returns None (no previous state)."""
@@ -287,7 +289,7 @@ class TestStateTransitionsWithThreshold:
         tracker.initialize()
 
         result = _make_result("brand-new-service", "up")
-        transition = tracker.update_and_get_transition(result)
+        transition, _ = tracker.update_and_get_transition(result)
 
         assert transition is None
         assert tracker.get_state("brand-new-service") == "up"
@@ -300,7 +302,7 @@ class TestStateTransitionsWithThreshold:
         tracker.initialize()
 
         result = _make_result("brand-new-service", "down")
-        transition = tracker.update_and_get_transition(result)
+        transition, _ = tracker.update_and_get_transition(result)
 
         assert transition is None
         assert tracker.get_state("brand-new-service") == "down"

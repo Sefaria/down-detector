@@ -10,9 +10,11 @@ before being reported as down.
 """
 import logging
 from typing import Literal
+from datetime import datetime
 
 from django.conf import settings
 from django.db.models import Max
+from django.utils import timezone
 
 from monitoring.models import HealthCheck
 from monitoring.services.checker import HealthCheckResult
@@ -41,6 +43,7 @@ class StateTracker:
         self._states: dict[str, str] = {}
         self._failure_counts: dict[str, int] = {}
         self._confirmed_down: set[str] = set()
+        self._outage_start_times: dict[str, datetime] = {}
         self._initialized: bool = False
 
     def _get_threshold(self, service_name: str) -> int:
@@ -92,6 +95,30 @@ class StateTracker:
                     self._failure_counts[service_name] = self._get_threshold(
                         service_name
                     )
+                    
+                    # Try to reconstruct when this outage started from the DB
+                    last_up = HealthCheck.objects.filter(
+                        service_name=service_name, status="up"
+                    ).order_by("-checked_at").first()
+                    
+                    if last_up:
+                        first_down = HealthCheck.objects.filter(
+                            service_name=service_name,
+                            status="down",
+                            checked_at__gt=last_up.checked_at,
+                        ).order_by("checked_at").first()
+                        if first_down:
+                            self._outage_start_times[service_name] = first_down.checked_at
+                    else:
+                        earliest_down = HealthCheck.objects.filter(
+                            service_name=service_name, status="down"
+                        ).order_by("checked_at").first()
+                        if earliest_down:
+                            self._outage_start_times[service_name] = earliest_down.checked_at
+                            
+                    # Fallback to the latest check if we really couldn't find anything
+                    if service_name not in self._outage_start_times:
+                        self._outage_start_times[service_name] = health_check.checked_at
                 else:
                     self._failure_counts[service_name] = 0
                 logger.debug(
@@ -115,9 +142,9 @@ class StateTracker:
 
     def update_and_get_transition(
         self, result: HealthCheckResult
-    ) -> TransitionType:
+    ) -> tuple[TransitionType, datetime | None]:
         """
-        Update state and return the transition type if any.
+        Update state and return the transition type and outage start time.
 
         A DOWN transition requires N consecutive failures (per the
         service's ``failure_threshold``).  A recovery fires immediately
@@ -127,9 +154,11 @@ class StateTracker:
             result: The health check result to process
 
         Returns:
-            "went_down" if service confirmed down after threshold failures
-            "recovered" if service went from confirmed-down to up
-            None if no reportable transition
+            Tuple of (transition_type, outage_start_time):
+            - "went_down" if service confirmed down after threshold failures
+            - "recovered" if service went from confirmed-down to up
+            - None if no reportable transition
+            - outage_start_time is returned for "recovered" transitions, or None.
         """
         service_name = result.service_name
         new_status = result.status
@@ -142,10 +171,15 @@ class StateTracker:
             if new_status == "down":
                 # Start counting but don't alert on first ever check
                 self._failure_counts[service_name] = 1
+                self._outage_start_times[service_name] = timezone.now()
             logger.info(f"First check for {service_name}: {new_status}")
-            return None
+            return None, None
 
         if new_status == "down":
+            if self._failure_counts.get(service_name, 0) == 0:
+                # First failure in a potential new outage streak
+                self._outage_start_times[service_name] = timezone.now()
+                
             self._failure_counts[service_name] = (
                 self._failure_counts.get(service_name, 0) + 1
             )
@@ -159,14 +193,14 @@ class StateTracker:
                     f"Service {service_name} went DOWN "
                     f"(confirmed after {count} consecutive failures)"
                 )
-                return "went_down"
+                return "went_down", None
 
             # Not enough failures yet, or already confirmed down
             logger.debug(
                 f"Service {service_name} check failed "
                 f"({count}/{threshold} consecutive failures)"
             )
-            return None
+            return None, None
 
         # new_status == "up"
         self._failure_counts[service_name] = 0
@@ -174,16 +208,19 @@ class StateTracker:
         if service_name in self._confirmed_down:
             self._confirmed_down.discard(service_name)
             self._states[service_name] = "up"
+            outage_start = self._outage_start_times.get(service_name)
             logger.info(f"Service {service_name} RECOVERED")
-            return "recovered"
+            return "recovered", outage_start
 
         # Was not confirmed down — blip resolved silently
         self._states[service_name] = "up"
-        return None
+        # Always clear outage start on up explicitly to prevent leaking state
+        self._outage_start_times.pop(service_name, None)
+        return None, None
 
     def process_results(
         self, results: list[HealthCheckResult]
-    ) -> list[tuple[HealthCheckResult, TransitionType]]:
+    ) -> list[tuple[HealthCheckResult, TransitionType, datetime | None]]:
         """
         Process multiple health check results.
 
@@ -191,13 +228,13 @@ class StateTracker:
             results: List of health check results
 
         Returns:
-            List of (result, transition) tuples for results with transitions
+            List of (result, transition, outage_start) tuples for results with transitions
         """
         transitions = []
         for result in results:
-            transition = self.update_and_get_transition(result)
+            transition, outage_start = self.update_and_get_transition(result)
             if transition is not None:
-                transitions.append((result, transition))
+                transitions.append((result, transition, outage_start))
         return transitions
 
 
