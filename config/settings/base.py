@@ -131,7 +131,7 @@ MONITORED_SERVICES = [
     },
     {
         "name": "AI Chatbot",
-        "url": env("AI_CHATBOT_HEALTH_URL", default="https://chat-dev.sefaria.org/api/health"),
+        "url": env("AI_CHATBOT_HEALTH_URL", default="https://chat.sefaria.org/api/health"),
         "method": "GET",
         "expected_status": 200,
         "timeout": 20,
