@@ -36,6 +36,39 @@ class HealthCheck(models.Model):
         return f"{self.service_name} - {self.status.upper()} @ {self.checked_at:%Y-%m-%d %H:%M:%S}"
 
 
+class Outage(models.Model):
+    """
+    Records an explicit period of downtime for a service.
+    """
+    
+    service_name = models.CharField(max_length=100, db_index=True)
+    start_time = models.DateTimeField(db_index=True)
+    end_time = models.DateTimeField(null=True, blank=True)
+    resolved = models.BooleanField(default=False, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-start_time"]
+        indexes = [
+            models.Index(fields=["service_name", "resolved", "-start_time"]),
+        ]
+        verbose_name = "Outage"
+        verbose_name_plural = "Outages"
+
+    def __str__(self):
+        status = "RESOLVED" if self.resolved else "ACTIVE"
+        return f"{self.service_name} - {status} from {self.start_time:%Y-%m-%d %H:%M:%S}"
+
+    @property
+    def duration(self):
+        """Returns the duration of the outage."""
+        if not self.end_time:
+            from django.utils import timezone
+            return timezone.now() - self.start_time
+        return self.end_time - self.start_time
+
+
 class Message(models.Model):
     """
     An incident message for the status page.
