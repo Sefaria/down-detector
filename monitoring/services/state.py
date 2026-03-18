@@ -16,7 +16,7 @@ from django.conf import settings
 from django.db.models import Max
 from django.utils import timezone
 
-from monitoring.models import HealthCheck
+from monitoring.models import HealthCheck, Outage
 from monitoring.services.checker import HealthCheckResult
 
 logger = logging.getLogger(__name__)
@@ -142,9 +142,9 @@ class StateTracker:
 
     def update_and_get_transition(
         self, result: HealthCheckResult
-    ) -> tuple[TransitionType, datetime | None]:
+    ) -> tuple[TransitionType, Outage | None]:
         """
-        Update state and return the transition type and outage start time.
+        Update state and return the transition type and exact Outage record.
 
         A DOWN transition requires N consecutive failures (per the
         service's ``failure_threshold``).  A recovery fires immediately
@@ -154,11 +154,11 @@ class StateTracker:
             result: The health check result to process
 
         Returns:
-            Tuple of (transition_type, outage_start_time):
-            - "went_down" if service confirmed down after threshold failures
-            - "recovered" if service went from confirmed-down to up
+            Tuple of (transition_type, Outage record):
+            - "went_down" if service confirmed down after threshold failures (returns newly created Outage)
+            - "recovered" if service went from confirmed-down to up (returns resolved Outage)
             - None if no reportable transition
-            - outage_start_time is returned for "recovered" transitions, or None.
+            - Outage is returned for "went_down" and "recovered" transitions, or None.
         """
         service_name = result.service_name
         new_status = result.status
@@ -193,7 +193,20 @@ class StateTracker:
                     f"Service {service_name} went DOWN "
                     f"(confirmed after {count} consecutive failures)"
                 )
-                return "went_down", None
+                
+                # Check if there's already an active outage to avoid duplicates
+                outage = Outage.objects.filter(
+                    service_name=service_name, resolved=False
+                ).first()
+                if not outage:
+                    start_time = self._outage_start_times.get(
+                        service_name, timezone.now()
+                    )
+                    outage = Outage.objects.create(
+                        service_name=service_name, start_time=start_time
+                    )
+                    
+                return "went_down", outage
 
             # Not enough failures yet, or already confirmed down
             logger.debug(
@@ -208,9 +221,18 @@ class StateTracker:
         if service_name in self._confirmed_down:
             self._confirmed_down.discard(service_name)
             self._states[service_name] = "up"
-            outage_start = self._outage_start_times.get(service_name)
             logger.info(f"Service {service_name} RECOVERED")
-            return "recovered", outage_start
+            
+            # Resolve the active outage
+            outage = Outage.objects.filter(
+                service_name=service_name, resolved=False
+            ).first()
+            if outage:
+                outage.end_time = timezone.now()
+                outage.resolved = True
+                outage.save()
+                
+            return "recovered", outage
 
         # Was not confirmed down — blip resolved silently
         self._states[service_name] = "up"
@@ -220,7 +242,7 @@ class StateTracker:
 
     def process_results(
         self, results: list[HealthCheckResult]
-    ) -> list[tuple[HealthCheckResult, TransitionType, datetime | None]]:
+    ) -> list[tuple[HealthCheckResult, TransitionType, Outage | None]]:
         """
         Process multiple health check results.
 
@@ -228,13 +250,13 @@ class StateTracker:
             results: List of health check results
 
         Returns:
-            List of (result, transition, outage_start) tuples for results with transitions
+            List of (result, transition, Outage) tuples for results with transitions
         """
         transitions = []
         for result in results:
-            transition, outage_start = self.update_and_get_transition(result)
+            transition, outage = self.update_and_get_transition(result)
             if transition is not None:
-                transitions.append((result, transition, outage_start))
+                transitions.append((result, transition, outage))
         return transitions
 
 

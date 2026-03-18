@@ -200,53 +200,13 @@ class TestProcessTransitionsWithAlerts:
         assert mock_send_alert.call_count == 2
 
 
-class TestOutageStartTime:
-    """Tests for _get_outage_start_time used in down alerts."""
-
-    def test_outage_start_time_finds_first_down_after_last_up(self):
-        """Since time should be the first 'down' record after the last 'up'."""
-        from monitoring.services.alerter import _get_outage_start_time
-        from monitoring.models import HealthCheck
-
-        now = timezone.now()
-        HealthCheck.objects.create(
-            service_name="start-test",
-            status="up",
-            checked_at=now - timezone.timedelta(minutes=5),
-        )
-        HealthCheck.objects.create(
-            service_name="start-test",
-            status="down",
-            checked_at=now - timezone.timedelta(minutes=3),
-        )
-        HealthCheck.objects.create(
-            service_name="start-test",
-            status="down",
-            checked_at=now - timezone.timedelta(minutes=2),
-        )
-
-        result = _get_outage_start_time("start-test")
-        # Should contain the timestamp from 3 minutes ago, not 2 or now
-        expected_time = (now - timezone.timedelta(minutes=3)).strftime(
-            "%Y-%m-%d %H:%M"
-        )
-        assert expected_time in result
-
-    def test_outage_start_time_fallback_when_no_records(self):
-        """Returns current time when no records exist."""
-        from monitoring.services.alerter import _get_outage_start_time
-
-        result = _get_outage_start_time("nonexistent-service")
-        # Should be a valid timestamp string
-        assert "UTC" in result
-
-
 class TestDowntimeDuration:
     """Tests for downtime duration in recovery alerts."""
 
     def test_recovery_alert_includes_downtime_field(self):
         """Recovery alert Block Kit payload contains a Downtime field."""
         from monitoring.services.alerter import _build_recovery_alert
+        from monitoring.models import Outage
 
         result = HealthCheckResult(
             service_name="test-service",
@@ -259,7 +219,7 @@ class TestDowntimeDuration:
         with patch("monitoring.services.alerter._get_downtime_duration", return_value="5m 30s"):
             with patch("monitoring.services.alerter.settings") as mock_settings:
                 mock_settings.STATUS_PAGE_URL = "https://status.sefaria.org"
-                blocks = _build_recovery_alert(result)
+                blocks = _build_recovery_alert(result, None)
 
         # Find the section block and check for Downtime field
         section = next(b for b in blocks if b["type"] == "section")
@@ -268,115 +228,69 @@ class TestDowntimeDuration:
         assert any("5m 30s" in t for t in field_texts)
 
     def test_recovery_alert_uses_provided_outage_start(self):
-        """Recovery alert correctly uses an explicitly provided outage start time."""
+        """Recovery alert correctly uses an explicitly provided outage."""
         from monitoring.services.alerter import _get_downtime_duration
+        from monitoring.models import Outage
 
         # Outage start time given explicitly 2 hours ago
         outage_start = timezone.now() - timezone.timedelta(hours=2)
+        outage = Outage(service_name="test-service", start_time=outage_start)
 
-        # We don't even need to mock the DB, it shouldn't be touched if the start is provided
-        duration = _get_downtime_duration("test-service", known_outage_start=outage_start)
+        duration = _get_downtime_duration(outage)
         assert "2h 0m" in duration or "1h 59m" in duration
 
     def test_downtime_duration_formats_minutes_and_seconds(self):
         """Duration under 1 hour shows minutes and seconds."""
         from monitoring.services.alerter import _get_downtime_duration
-        from monitoring.models import HealthCheck
+        from monitoring.models import Outage
 
         now = timezone.now()
-        # Create 3 consecutive down records spanning 5 minutes
-        HealthCheck.objects.create(
+        outage = Outage(
             service_name="fmt-test",
-            status="up",
-            checked_at=now - timezone.timedelta(minutes=10),
-        )
-        HealthCheck.objects.create(
-            service_name="fmt-test",
-            status="down",
-            checked_at=now - timezone.timedelta(minutes=5),
-        )
-        HealthCheck.objects.create(
-            service_name="fmt-test",
-            status="down",
-            checked_at=now - timezone.timedelta(minutes=3),
+            start_time=now - timezone.timedelta(minutes=5),
         )
 
-        duration = _get_downtime_duration("fmt-test")
+        duration = _get_downtime_duration(outage)
         assert "m" in duration
         assert "h" not in duration
 
     def test_downtime_duration_formats_hours(self):
         """Duration over 1 hour shows hours and minutes."""
         from monitoring.services.alerter import _get_downtime_duration
-        from monitoring.models import HealthCheck
+        from monitoring.models import Outage
 
         now = timezone.now()
-        HealthCheck.objects.create(
+        outage = Outage(
             service_name="hours-test",
-            status="up",
-            checked_at=now - timezone.timedelta(hours=3),
-        )
-        HealthCheck.objects.create(
-            service_name="hours-test",
-            status="down",
-            checked_at=now - timezone.timedelta(hours=2),
+            start_time=now - timezone.timedelta(hours=2, minutes=15),
         )
 
-        duration = _get_downtime_duration("hours-test")
-        assert "h" in duration
+        duration = _get_downtime_duration(outage)
+        assert "2h 1" in duration  # Allow 15 or 14 minutes due to execution time
 
     def test_downtime_duration_unknown_when_no_records(self):
         """Returns 'Unknown' when no down records exist."""
         from monitoring.services.alerter import _get_downtime_duration
 
-        duration = _get_downtime_duration("nonexistent-service")
+        duration = _get_downtime_duration(None)
         assert duration == "Unknown"
 
     def test_downtime_duration_with_recovery_record_already_persisted(self):
-        """Regression: recovery 'up' record in DB should not break the calculation.
-
-        In production, the recovery HealthCheck is persisted BEFORE
-        _get_downtime_duration is called. The old code walked backwards
-        through all records and immediately broke on the new 'up' record,
-        yielding an incorrect (too short) downtime.
-        """
+        """Ensure end_time is respected if an outage is marked closed."""
         from monitoring.services.alerter import _get_downtime_duration
-        from monitoring.models import HealthCheck
+        from monitoring.models import Outage
 
         now = timezone.now()
-        # Sequence: up -> down -> down -> down -> up (recovery already saved)
-        HealthCheck.objects.create(
+        start_time = now - timezone.timedelta(minutes=10)
+        end_time = now - timezone.timedelta(minutes=1)
+        
+        outage = Outage(
             service_name="regression-test",
-            status="up",
-            checked_at=now - timezone.timedelta(minutes=15),
-        )
-        HealthCheck.objects.create(
-            service_name="regression-test",
-            status="down",
-            checked_at=now - timezone.timedelta(minutes=10),
-        )
-        HealthCheck.objects.create(
-            service_name="regression-test",
-            status="down",
-            checked_at=now - timezone.timedelta(minutes=7),
-        )
-        HealthCheck.objects.create(
-            service_name="regression-test",
-            status="down",
-            checked_at=now - timezone.timedelta(minutes=4),
-        )
-        # Recovery record already persisted (this is the key scenario)
-        HealthCheck.objects.create(
-            service_name="regression-test",
-            status="up",
-            checked_at=now - timezone.timedelta(seconds=30),
+            start_time=start_time,
+            end_time=end_time,
+            resolved=True,
         )
 
-        duration = _get_downtime_duration("regression-test")
-        # Outage started 10 minutes ago, so duration should be ~10m, not ~4m or ~30s
-        assert "m" in duration
-        # Should be at least 9 minutes (accounting for test timing)
-        total_text = duration.replace("m", "").replace("s", "").strip()
-        parts = duration.split("m")
-        minutes_part = int(parts[0].strip())
-        assert minutes_part >= 9, f"Expected ≥9m but got {duration}"
+        duration = _get_downtime_duration(outage)
+        # Exactly 9 minutes, no execution time drift since both are fixed times
+        assert duration == "9m 0s"
