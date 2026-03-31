@@ -46,6 +46,12 @@ QUOTES_OPERATIONAL = [
         "ref": "Psalms.121.8",
         "source": "Psalms 121:8",
     },
+    {
+        "hebrew": "וַיֹּאמֶר אֱלֹהִים יְהִי אוֹר וַיְהִי־אוֹר",
+        "english": "And God said: Let there be light — and there was light.",
+        "ref": "Genesis.1.3",
+        "source": "Genesis 1:3",
+    }
 ]
 
 QUOTES_PARTIAL = [
@@ -93,12 +99,6 @@ QUOTES_MAJOR = [
         "english": "Fear not, for I am with you.",
         "ref": "Isaiah.41.10",
         "source": "Isaiah 41:10",
-    },
-    {
-        "hebrew": "וַיֹּאמֶר אֱלֹהִים יְהִי אוֹר וַיְהִי־אוֹר",
-        "english": "And God said: Let there be light — and there was light.",
-        "ref": "Genesis.1.3",
-        "source": "Genesis 1:3",
     },
 ]
 
