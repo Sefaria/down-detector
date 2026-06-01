@@ -1,171 +1,318 @@
 # Sefaria Status Monitor
 
-Real-time uptime monitoring system for Sefaria's critical services.
+Real-time uptime monitoring and a public status page for Sefaria's critical services — live at **[status.sefaria.org](https://status.sefaria.org)**.
 
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://python.org)
 [![Django 5.2](https://img.shields.io/badge/django-5.2-green.svg)](https://djangoproject.com)
+[![Tests](https://img.shields.io/badge/tests-78%20passing-brightgreen.svg)](#testing)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-## Features
+A small, self-contained Django application that checks Sefaria's services on a fixed interval, records every result, confirms outages before alerting (to filter out brief blips), posts rich [Slack](https://slack.com) notifications when a service goes down or recovers, and renders a public, SEO-optimized status page.
 
-- **Health Checking**: Parallel HTTP checks with configurable retries (sefaria.org, MCP Server, AI Chatbot, Linker)
-- **Async E2E Verification**: Two-phase check for the Linker API — verifies task submission *and* successful processing, with retries
-- **Consecutive Failure Threshold**: Per-service configurable threshold — requires N consecutive failed check cycles before alerting, filtering brief blips
-- **State Tracking**: Detects UP/DOWN transitions to prevent alert storms
-- **Slack Alerts**: Block Kit notifications on confirmed outages, with accurate outage start time and downtime duration on recovery
-- **Status Page**: Public dashboard at `status.sefaria.org` with 60s auto-refresh
-- **Scheduled Cleanup**: Automatic daily purging of old records at 3 AM UTC
+---
 
-## Quick Start
+## Table of Contents
 
-### Local Development
+- [Why this exists](#why-this-exists)
+- [What it monitors](#what-it-monitors)
+- [How it works](#how-it-works)
+- [Architecture](#architecture)
+- [Data model](#data-model)
+- [Quick start (local development)](#quick-start-local-development)
+- [Configuration](#configuration)
+- [Management commands](#management-commands)
+- [The status page](#the-status-page)
+- [Deployment](#deployment)
+- [Testing](#testing)
+- [Project structure](#project-structure)
+- [Operations & runbook](#operations--runbook)
+- [License](#license)
+
+---
+
+## Why this exists
+
+Sefaria runs several public services (the main site, an MCP server, an AI chatbot, and the Linker API). When one degrades, the team needs to (a) find out fast, and (b) give users a single trustworthy place to check. This project does both:
+
+- **Fast, accurate alerts** to a Slack channel, with the *real* outage start time and total downtime on recovery.
+- **A public status page** that anyone can check during an incident, so support volume drops and users aren't left guessing.
+
+The design goal is **low false-positive rate**: a single failed request never pages anyone. A service must fail *N* consecutive check cycles (configurable per service) before it is reported as down, both in Slack and on the status page.
+
+## What it monitors
+
+Services are declared in [`config/settings/base.py`](config/settings/base.py) (`MONITORED_SERVICES`). Each URL can be overridden via an environment variable.
+
+| Service | Check | Method | Expects | Failure threshold | Env override |
+|---|---|---|---|---|---|
+| **sefaria.org** | `…/healthz` | GET | `200` | 2 cycles | `SEFARIA_HEALTH_URL` |
+| **MCP Server** | `mcp.sefaria.org/healthz` | GET | `200` | 2 cycles | `MCP_HEALTH_URL` |
+| **AI Chatbot** | `chat.sefaria.org/api/health` | GET | `200` | 2 cycles | `AI_CHATBOT_HEALTH_URL` |
+| **Linker** | `…/api/find-refs` | POST | `202` + async result | 3 cycles | `LINKER_HEALTH_URL` |
+
+The **Linker** uses a two-phase async check (see below) and has a higher threshold because it is the noisiest service.
+
+## How it works
+
+A single check **cycle** runs every `HEALTH_CHECK_INTERVAL` seconds (default 60):
+
+1. **Check** — All services are checked **in parallel** ([`ThreadPoolExecutor`](https://docs.python.org/3/library/concurrent.futures.html)) so one slow/down service never blocks the others. Each request is retried up to `HEALTH_CHECK_RETRIES` times with `HEALTH_CHECK_RETRY_DELAY` seconds between attempts.
+2. **Persist** — Every result is written to the `HealthCheck` table (status, HTTP code, response time, error).
+3. **Detect transitions** — A `StateTracker` compares each result against the last known state and decides whether a *reportable* transition occurred.
+4. **Alert** — On a confirmed `went_down` or `recovered` transition, a Slack Block Kit message is sent.
+
+### Confirmation logic (the important part)
+
+- A service is only reported **DOWN** after it fails `failure_threshold` **consecutive** cycles. The first failures in a streak are counted but stay silent.
+- When a service is confirmed down, an **`Outage`** record is opened with the timestamp of the *first* failure in the streak — so the "Since" time in Slack and the measured downtime are accurate, not the time the threshold was crossed.
+- **Recovery fires immediately** on the first successful check after a confirmed outage. The open `Outage` is closed (`end_time`, `resolved=True`) and its duration drives the "Downtime" field in the recovery alert.
+- A blip that self-resolves before hitting the threshold produces **no alert** and no `Outage`.
+
+The tracker is a process-global singleton ([`get_state_tracker()`](monitoring/services/state.py)) that rebuilds its in-memory state from the database on first use, so it survives process restarts without re-alerting on an already-known outage.
+
+### Two-phase async check (Linker)
+
+A plain `202 Accepted` from the Linker only means "task queued" — it doesn't prove the background worker, ML model, or ElasticSearch actually work. The Linker check therefore:
+
+1. **Phase 1** — POSTs a real reference (`"Job 1:1"`), expects `202` and extracts a `task_id`.
+2. **Phase 2** — Polls `…/api/async/<task_id>` until the task reaches `SUCCESS` **with a non-empty result**. A `FAILURE` state, an empty result, or a polling timeout all count as down.
+
+This catches end-to-end failures a shallow check would miss.
+
+## Architecture
+
+The system runs as **two long-lived processes** plus an on-demand maintenance job, all from the same image:
+
+```
+                          ┌──────────────────────────────────────────┐
+                          │              PostgreSQL                   │
+                          │   HealthCheck · Outage · Message tables   │
+                          └──────────────────────────────────────────┘
+                              ▲                              ▲
+              writes results  │                              │  reads latest state
+                              │                              │
+┌─────────────────────────────────────────┐   ┌──────────────────────────────────────┐
+│   SCHEDULER process (run_checks)         │   │   WEB process (gunicorn)             │
+│                                          │   │                                      │
+│   APScheduler                            │   │   Django                             │
+│    ├─ every 60s → health check cycle     │   │    ├─ GET /         → status page    │
+│    │     check_all_services (parallel)   │   │    ├─ GET /robots.txt                │
+│    │     → StateTracker (UP/DOWN detect) │   │    └─ GET /sitemap.xml               │
+│    │     → Slack alerter (Block Kit)     │   │    └─ GET /admin/   → incident mgmt  │
+│    └─ daily 03:00 UTC → cleanup old rows  │   │                                      │
+└─────────────────────────────────────────┘   └──────────────────────────────────────┘
+                              │
+                              ▼
+                       ┌─────────────┐
+                       │    Slack    │  🔴 down / 🟢 recovered
+                       └─────────────┘
+```
+
+- The **scheduler** does all the checking, alerting, and daily cleanup. It owns the `StateTracker`.
+- The **web** process only reads from the database to render the status page and serve the Django admin (used by operators to post incident messages). It never performs checks.
+- Both connect to the same PostgreSQL database, which is the single source of truth.
+
+Key modules:
+
+| File | Responsibility |
+|---|---|
+| [`monitoring/services/checker.py`](monitoring/services/checker.py) | Performs HTTP checks (standard + async two-phase), retries, parallel execution |
+| [`monitoring/services/state.py`](monitoring/services/state.py) | `StateTracker` — consecutive-failure logic, transition detection, `Outage` lifecycle |
+| [`monitoring/services/alerter.py`](monitoring/services/alerter.py) | Builds and sends Slack Block Kit alerts |
+| [`monitoring/services/scheduler.py`](monitoring/services/scheduler.py) | APScheduler wiring; the `run_health_check_cycle` and cleanup jobs |
+| [`monitoring/views.py`](monitoring/views.py) | Status page, status-aware quotes, robots.txt, sitemap.xml |
+| [`monitoring/models.py`](monitoring/models.py) | `HealthCheck`, `Outage`, `Message` |
+
+## Data model
+
+| Model | Purpose | Notes |
+|---|---|---|
+| **`HealthCheck`** | One row per service per check cycle | The raw time-series. Pruned after `HEALTH_CHECK_RETENTION_DAYS`. |
+| **`Outage`** | One row per confirmed downtime period | `start_time` = first failure in the streak; closed on recovery. Drives accurate Slack downtime. |
+| **`Message`** | An operator-authored incident note shown on the status page | Severity `high` / `medium` / `resolved`; managed in Django admin. |
+
+## Quick start (local development)
+
+> **Prerequisites:** Python 3.12. Local development uses SQLite — no PostgreSQL or Docker required.
 
 ```bash
-# Clone and setup
 git clone <repository-url>
-cd sefaria-status
+cd "Sefaria Down Detector"
+
+# Create and activate a virtual environment
 python -m venv .venv
-.venv\Scripts\activate  # Windows
-# source .venv/bin/activate  # Linux/Mac
+.venv\Scripts\activate            # Windows (PowerShell/CMD)
+# source .venv/bin/activate       # macOS / Linux
 
 # Install dependencies
 pip install -r requirements.txt
 
-# Setup database
+# Initialize the database and an admin user
 python manage.py migrate
 python manage.py createsuperuser
 
-# Run development server
+# Terminal 1 — run the web/status page (http://localhost:8000)
 python manage.py runserver
 
-# Run health check scheduler
-python manage.py run_checks
+# Terminal 2 — run one check cycle and exit (no Slack needed)
+python manage.py run_checks --once
 ```
 
-### Docker Deployment
+`manage.py` defaults to **`config.settings.development`** (SQLite, `DEBUG=True`). To run the full scheduler loop locally, use `python manage.py run_checks` (Ctrl+C to stop).
 
-```bash
-# Copy and configure environment
-cp .env.example .env
-# Edit .env with your settings
-
-# Build and start
-docker compose up -d
-
-# View logs
-docker compose logs -f scheduler
-```
+> Without a `SLACK_WEBHOOK_URL`, checks still run and persist — alerts are simply skipped with a log line. This is the normal local-dev setup.
 
 ## Configuration
 
-### Environment Variables
+Settings are split by environment under [`config/settings/`](config/settings/) and selected with `DJANGO_SETTINGS_MODULE`:
+
+| Module | Used by | Database | Debug |
+|---|---|---|---|
+| `config.settings.development` | `manage.py` default | SQLite | `True` |
+| `config.settings.production` | Docker / Coolify | PostgreSQL (`DATABASE_URL`) | `False` |
+| `config.settings.test` | pytest (`pytest.ini`) | in-memory SQLite | `False` |
+
+### Environment variables
+
+Copy [`.env.example`](.env.example) to `.env` and edit. All monitoring tunables read from the environment via [`django-environ`](https://django-environ.readthedocs.io/).
 
 | Variable | Description | Default |
-|----------|-------------|---------|
-| `SECRET_KEY` | Django secret key | Required |
+|---|---|---|
+| `SECRET_KEY` | Django secret key | dev placeholder (**set in prod**) |
 | `DEBUG` | Enable debug mode | `False` |
-| `ALLOWED_HOSTS` | Comma-separated hosts | `status.sefaria.org` |
-| `DATABASE_URL` | PostgreSQL connection URL | SQLite (dev) |
-| `SLACK_WEBHOOK_URL` | Slack incoming webhook | - |
-| `SLACK_CHANNEL` | Alert channel name | `sefaria-down` |
-| `STATUS_PAGE_URL` | Public status page URL | - |
-| `HEALTH_CHECK_INTERVAL` | Check frequency (seconds) | `60` |
-| `HEALTH_CHECK_RETRIES` | Retry attempts per check | `3` |
-| `HEALTH_CHECK_RETRY_DELAY` | Delay between retries (seconds) | `10` |
-| `ALERT_AFTER_CONSECUTIVE_FAILURES` | Default consecutive failures before alerting | `2` |
-| `HEALTH_CHECK_RETENTION_DAYS` | Days to keep records | `60` |
+| `ALLOWED_HOSTS` | Comma-separated hosts | `status.sefaria.org` (prod) |
+| `DATABASE_URL` | PostgreSQL connection URL (prod) | SQLite (dev) |
+| `SLACK_WEBHOOK_URL` | Slack incoming webhook; **alerts are skipped if empty** | `""` |
+| `SLACK_CHANNEL` | Informational only — the webhook itself determines the channel | `sefaria-down` |
+| `STATUS_PAGE_URL` | Public URL used in Slack links and the sitemap | `https://status.sefaria.org` |
+| `HEALTH_CHECK_INTERVAL` | Seconds between check cycles | `60` |
+| `HEALTH_CHECK_RETRIES` | Retry attempts per request | `3` |
+| `HEALTH_CHECK_RETRY_DELAY` | Seconds between retries | `10` |
+| `ALERT_AFTER_CONSECUTIVE_FAILURES` | Default consecutive-failure threshold (per-service values override this) | `2` |
+| `HEALTH_CHECK_RETENTION_DAYS` | Days of `HealthCheck` history to keep | `60` |
+| `SEFARIA_HEALTH_URL` / `MCP_HEALTH_URL` / `AI_CHATBOT_HEALTH_URL` / `LINKER_HEALTH_URL` | Per-service URL overrides | see [base.py](config/settings/base.py) |
 
-### Monitored Services
+### Tuning a monitored service
 
-Configured in `config/settings/base.py`:
+Each entry in `MONITORED_SERVICES` accepts:
 
 ```python
-MONITORED_SERVICES = [
-    {
-        "name": "sefaria.org",
-        "url": "https://www.sefaria.org/healthz",
-        "method": "GET",
-        "follow_redirects": True,
-        "expected_status": 200,
-        "failure_threshold": 2,  # alert after 2 consecutive failed cycles
+{
+    "name": "Linker",                       # display name + DB key
+    "url": "https://www.sefaria.org/api/find-refs",
+    "method": "POST",                       # default GET
+    "expected_status": 202,                 # status that means "healthy"
+    "timeout": 20,                          # per-request seconds
+    "follow_redirects": False,              # default False
+    "failure_threshold": 3,                 # consecutive cycles before DOWN
+    "check_type": "async_two_phase",        # omit for a standard check
+    "request_body": {"text": {"title": "", "body": "Job 1:1"}},
+    "async_verification": {
+        "base_url": "https://www.sefaria.org/api/async/",
+        "max_poll_attempts": 10,
+        "poll_interval": 1,                 # seconds between polls
     },
-    {
-        "name": "MCP Server",
-        "url": "https://mcp.sefaria.org/healthz",
-        "expected_status": 200,
-        "failure_threshold": 2,
-    },
-    {
-        "name": "AI Chatbot",
-        "url": "https://chat-dev.sefaria.org/api/health",
-        "expected_status": 200,
-        "failure_threshold": 2,
-    },
-    {
-        "name": "Linker",
-        "url": "https://www.sefaria.org/api/find-refs",
-        "method": "POST",
-        "expected_status": 202,
-        "check_type": "async_two_phase",
-        "failure_threshold": 3,  # noisiest service, higher threshold
-        "request_body": {"text": {"title": "", "body": "Job 1:1"}},
-        "async_verification": {
-            "base_url": "https://www.sefaria.org/api/async/",
-            "max_poll_attempts": 10,
-            "poll_interval": 1,
-        },
-    },
-]
+}
 ```
 
-Each service's `failure_threshold` sets how many consecutive failed check cycles are required before a DOWN alert is sent to Slack. This filters brief blips that self-resolve. Recovery alerts always fire immediately on the first successful check. Falls back to `ALERT_AFTER_CONSECUTIVE_FAILURES` (default 2) if not set per service.
+To **add a service**, append a dict here — no migration or code change is needed. The status page and alerter pick it up automatically.
 
-## Management Commands
+## Management commands
 
 ```bash
-# Run health check scheduler (includes auto-cleanup at 3 AM UTC)
+# Run the scheduler loop: checks every interval + daily cleanup at 03:00 UTC
 python manage.py run_checks
 
-# Run once (for testing)
+# Run a single check cycle and exit (handy for testing/CI)
 python manage.py run_checks --once
 
-# Manual cleanup (runs automatically via scheduler)
+# Delete HealthCheck rows older than the retention window
 python manage.py cleanup_old_checks
-
-# Dry run cleanup
-python manage.py cleanup_old_checks --dry-run
+python manage.py cleanup_old_checks --days 14   # override retention
+python manage.py cleanup_old_checks --dry-run   # preview only
 ```
+
+Cleanup runs automatically inside the scheduler; the standalone command exists for manual/maintenance use.
+
+## The status page
+
+[`monitoring/templates/monitoring/status.html`](monitoring/templates/monitoring/status.html) renders a self-refreshing public page:
+
+- **Overall banner** — `All Systems Operational` / `Partial Issues` / `Major Outage`, computed from confirmed service states *and* active incident severity.
+- **Per-service list** — Operational / Down / Unknown, with last response time. A service shows "Down" only when its last `failure_threshold` checks all failed (mirrors the alert logic so the page and Slack never disagree).
+- **Status-aware Tanakh verse** — A Hebrew + English verse, with a deep link to Sefaria, chosen from a pool that matches the current status (reassuring when up, hopeful during an outage). Defined in [`views.py`](monitoring/views.py).
+- **Incidents** — Operator-posted `Message` records (active + recent history), authored in the Django admin.
+- **Dynamic favicon** — A colored status dot is drawn onto the favicon client-side.
+- **Auto-refresh** — The page reloads every 60s; the view itself is cached for 30s (`@cache_page`).
+- **SEO** — Open Graph + Twitter cards, JSON-LD, `robots.txt`, and `sitemap.xml`, targeting the query "is Sefaria down".
+
+To post an incident: log into `/admin/`, add a `Message` (severity high/medium), and it appears immediately. Mark it resolved via the bulk admin action.
+
+## Deployment
+
+Production runs in Docker, orchestrated by **[Coolify](https://coolify.io/)** (which provides the Traefik reverse proxy and TLS). The [`Dockerfile`](Dockerfile) is a multi-stage build that runs as a non-root user and serves static files via [WhiteNoise](https://whitenoise.readthedocs.io/) + gunicorn.
+
+[`docker-compose.yml`](docker-compose.yml) defines four services:
+
+| Service | Role | Command |
+|---|---|---|
+| `db` | PostgreSQL 16 | — |
+| `web` | Status page + admin | `migrate` then `gunicorn` |
+| `scheduler` | The health-check loop | `python manage.py run_checks` |
+| `cleanup` | One-shot maintenance (profile `maintenance`) | `python manage.py cleanup_old_checks` |
+
+```bash
+cp .env.example .env          # set SECRET_KEY, DB_PASSWORD, SLACK_WEBHOOK_URL, ALLOWED_HOSTS
+docker compose up -d --build
+docker compose logs -f scheduler
+```
+
+`docker-compose.override.yml` (git-ignored) adds local port mapping and a source mount; in production Coolify routes traffic to the `web` service, so no published ports are needed.
 
 ## Testing
 
+78 tests cover the checker, state machine, alerter, scheduler, models, cleanup, views, and SEO.
+
 ```bash
-# Run all tests
-pytest tests/ -v
+# All tests (uses config.settings.test via pytest.ini)
+.venv/Scripts/python -m pytest tests/ -v
 
-# Run with coverage
-pytest tests/ --cov=monitoring --cov-report=html
+# With coverage
+.venv/Scripts/python -m pytest tests/ --cov=monitoring --cov-report=html
 ```
 
-## Architecture
+Tests mock all outbound HTTP and Slack calls, so they make no network requests. [`time-machine`](https://github.com/adamchainz/time-machine) is used to test time-dependent outage-duration logic.
+
+## Project structure
 
 ```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│   APScheduler   │────▶│  Health Checker │────▶│   PostgreSQL    │
-│   (run_checks)  │     │    (httpx)      │     │   (HealthCheck) │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
-                               │
-                               ▼
-                        ┌─────────────────┐
-                        │  State Tracker  │
-                        │ (UP/DOWN detect)│
-                        └─────────────────┘
-                               │
-                               ▼
-                        ┌─────────────────┐
-                        │  Slack Alerter  │
-                        │  (Block Kit)    │
-                        └─────────────────┘
+config/
+  settings/          base · development · production · test
+  urls.py            admin/ + monitoring routes
+monitoring/
+  models.py          HealthCheck · Outage · Message
+  views.py           status page, quotes, robots.txt, sitemap.xml
+  admin.py           HealthCheck (read-only) + Message admin
+  services/
+    checker.py       HTTP checks, retries, parallelism, async two-phase
+    state.py         StateTracker — transitions, Outage lifecycle
+    alerter.py       Slack Block Kit alerts
+    scheduler.py     APScheduler jobs (checks + cleanup)
+  management/commands/
+    run_checks.py        scheduler entrypoint
+    cleanup_old_checks.py
+  templates/ static/ migrations/
+tests/               78 tests + factories + fixtures
+Dockerfile  docker-compose.yml  requirements.txt  .env.example
 ```
+
+## Operations & runbook
+
+- **A service is red but I think it's fine** — Check the scheduler logs (`docker compose logs scheduler`). The page only goes red after `failure_threshold` consecutive failures; confirm the health endpoint really returns the expected status.
+- **No Slack alerts** — Verify `SLACK_WEBHOOK_URL` is set in the `scheduler` service's environment; an empty value logs "skipping alert" and sends nothing.
+- **Post an incident banner** — `/admin/` → Incident Messages → add (severity `high` → "Major Outage", `medium` → "Partial Issues").
+- **Database growing** — `HealthCheck` rows are pruned daily; adjust `HEALTH_CHECK_RETENTION_DAYS` or run `cleanup_old_checks` manually.
+- **Tune noise** — Raise a service's `failure_threshold` in `base.py` if it flaps; lower it for faster paging.
 
 ## License
 
