@@ -4,7 +4,7 @@ Real-time uptime monitoring and a public status page for Sefaria's critical serv
 
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://python.org)
 [![Django 5.2](https://img.shields.io/badge/django-5.2-green.svg)](https://djangoproject.com)
-[![Tests](https://img.shields.io/badge/tests-78%20passing-brightgreen.svg)](#testing)
+[![Tests](https://img.shields.io/badge/tests-83%20passing-brightgreen.svg)](#testing)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 A small, self-contained Django application that checks Sefaria's services on a fixed interval, records every result, confirms outages before alerting (to filter out brief blips), posts rich [Slack](https://slack.com) notifications when a service goes down or recovers, and renders a public, SEO-optimized status page.
@@ -271,7 +271,7 @@ docker compose logs -f scheduler
 
 ## Testing
 
-78 tests cover the checker, state machine, alerter, scheduler, models, cleanup, views, and SEO.
+83 tests cover the checker, state machine, alerter, scheduler, models, admin, cleanup, views, and SEO.
 
 ```bash
 # All tests (uses config.settings.test via pytest.ini)
@@ -292,7 +292,7 @@ config/
 monitoring/
   models.py          HealthCheck · Outage · Message
   views.py           status page, quotes, robots.txt, sitemap.xml
-  admin.py           HealthCheck (read-only) + Message admin
+  admin.py           HealthCheck + Outage (read-only) · Message (CRUD)
   services/
     checker.py       HTTP checks, retries, parallelism, async two-phase
     state.py         StateTracker — transitions, Outage lifecycle
@@ -302,7 +302,7 @@ monitoring/
     run_checks.py        scheduler entrypoint
     cleanup_old_checks.py
   templates/ static/ migrations/
-tests/               78 tests + factories + fixtures
+tests/               83 tests + factories + fixtures
 Dockerfile  docker-compose.yml  requirements.txt  .env.example
 ```
 
