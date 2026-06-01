@@ -308,6 +308,98 @@ class TestStateTransitionsWithThreshold:
         assert tracker.get_state("brand-new-service") == "down"
 
 
+class TestExternalOutageResolution:
+    """Tests for reconciling outages resolved out-of-band (e.g. from admin)."""
+
+    def _confirm_down(self):
+        """Build a tracker with 'test-service' confirmed down + an open Outage.
+
+        Callers must already have ``monitoring.services.state.settings``
+        patched with a threshold-2 config for 'test-service'.
+        """
+        from monitoring.services.state import StateTracker
+
+        HealthCheckFactory(service_name="test-service", status="up")
+        tracker = StateTracker()
+        tracker.initialize()
+
+        tracker.update_and_get_transition(_make_result("test-service", "down"))
+        t, outage = tracker.update_and_get_transition(
+            _make_result("test-service", "down")
+        )
+        assert t == "went_down"
+        assert outage is not None and outage.resolved is False
+        return tracker, outage
+
+    def test_initialize_creates_open_outage_for_down_service(self):
+        """Restarting mid-outage backfills an open Outage row (no 'Unknown')."""
+        from monitoring.services.state import StateTracker
+        from monitoring.models import Outage
+
+        HealthCheckFactory(service_name="test-service", status="down")
+
+        tracker = StateTracker()
+        tracker.initialize()
+
+        assert Outage.objects.filter(
+            service_name="test-service", resolved=False
+        ).count() == 1
+
+    @patch("monitoring.services.state.settings")
+    def test_external_resolve_then_recovery_fires_no_duplicate_alert(
+        self, mock_settings
+    ):
+        """If the outage is closed in admin and the service is up, stay silent."""
+        from monitoring.models import Outage
+
+        mock_settings.MONITORED_SERVICES = THRESHOLD_2_SERVICES
+        mock_settings.ALERT_AFTER_CONSECUTIVE_FAILURES = 2
+
+        tracker, outage = self._confirm_down()
+
+        # Operator force-resolves the outage from the admin (other process).
+        outage.end_time = timezone.now()
+        outage.resolved = True
+        outage.save()
+
+        # Service is actually healthy now → no duplicate recovery alert.
+        t, _ = tracker.update_and_get_transition(_make_result("test-service", "up"))
+        assert t is None
+        assert tracker.get_state("test-service") == "up"
+
+    @patch("monitoring.services.state.settings")
+    def test_external_resolve_while_still_down_reopens_outage(self, mock_settings):
+        """If the outage is closed but the service is still failing, re-detect."""
+        from monitoring.models import Outage
+
+        mock_settings.MONITORED_SERVICES = THRESHOLD_2_SERVICES
+        mock_settings.ALERT_AFTER_CONSECUTIVE_FAILURES = 2
+
+        tracker, outage = self._confirm_down()
+
+        # Mistaken/early resolve while the service is genuinely still down.
+        outage.end_time = timezone.now()
+        outage.resolved = True
+        outage.save()
+
+        # Next cycle still down → reconcile clears state, streak restarts.
+        t1, _ = tracker.update_and_get_transition(
+            _make_result("test-service", "down")
+        )
+        assert t1 is None  # first failure of a fresh streak
+
+        # Threshold reached again → a brand-new outage opens and re-alerts.
+        t2, new_outage = tracker.update_and_get_transition(
+            _make_result("test-service", "down")
+        )
+        assert t2 == "went_down"
+        assert new_outage is not None
+        assert new_outage.pk != outage.pk
+        assert Outage.objects.filter(
+            service_name="test-service", resolved=False
+        ).count() == 1
+
+
 class TestProcessResults:
     """Tests for batch processing of results."""
 

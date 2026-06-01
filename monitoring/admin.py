@@ -1,9 +1,14 @@
 """
 Django Admin configuration for monitoring models.
 """
+import logging
+
 from django.contrib import admin
+from django.utils import timezone
 
 from .models import HealthCheck, Outage, Message
+
+logger = logging.getLogger(__name__)
 
 
 @admin.register(HealthCheck)
@@ -36,11 +41,15 @@ class HealthCheckAdmin(admin.ModelAdmin):
 
 @admin.register(Outage)
 class OutageAdmin(admin.ModelAdmin):
-    """Admin for outage records (read-only).
+    """Admin for outage records.
 
-    Outages are opened and resolved automatically by the StateTracker,
-    which holds the authoritative state in memory. They are exposed here
-    for inspection only — manual edits could diverge from the tracker.
+    Outages are opened and resolved automatically by the StateTracker.
+    Operators cannot create or hand-edit fields (that would diverge from
+    the tracker), but they can **force-resolve** a stuck outage via the
+    ``resolve_outages`` action — for example when a recovery was missed
+    and the record is dangling open. The scheduler reconciles with the
+    database each cycle, so closing the record here also clears the
+    monitor's in-memory down state.
     """
 
     list_display = [
@@ -54,6 +63,19 @@ class OutageAdmin(admin.ModelAdmin):
     search_fields = ["service_name"]
     date_hierarchy = "start_time"
     ordering = ["-start_time"]
+    actions = ["resolve_outages"]
+
+    # Every field is read-only: the only sanctioned mutation is the
+    # resolve action below, so manual edits can't desync from the tracker.
+    readonly_fields = [
+        "service_name",
+        "start_time",
+        "end_time",
+        "resolved",
+        "duration_display",
+        "created_at",
+        "updated_at",
+    ]
 
     @admin.display(description="Duration")
     def duration_display(self, obj):
@@ -67,12 +89,50 @@ class OutageAdmin(admin.ModelAdmin):
             return f"{minutes}m {seconds}s"
         return f"{seconds}s"
 
-    # Outages are system-generated, not manually created or edited.
+    @admin.action(
+        description="Force-resolve selected outages (close stuck incidents)",
+        permissions=["change"],
+    )
+    def resolve_outages(self, request, queryset):
+        """
+        Manually close the selected open outages.
+
+        Sets ``end_time`` (if not already set) and ``resolved=True`` for
+        each currently-open outage. The scheduler picks this up on its next
+        check cycle: it clears the in-memory down state and, if the service
+        is in fact still failing, opens a fresh outage and re-alerts.
+        Already-resolved outages in the selection are skipped.
+        """
+        now = timezone.now()
+        resolved = 0
+        for outage in queryset.filter(resolved=False):
+            outage.end_time = outage.end_time or now
+            outage.resolved = True
+            outage.save()
+            resolved += 1
+            logger.warning(
+                f"Outage {outage.pk} for {outage.service_name} force-resolved "
+                f"from admin by {request.user}"
+            )
+
+        if resolved:
+            self.message_user(
+                request, f"{resolved} outage(s) force-resolved."
+            )
+        else:
+            self.message_user(
+                request, "No open outages were selected; nothing to resolve."
+            )
+
+    # Outages are system-generated; no manual creation.
     def has_add_permission(self, request):
         return False
 
     def has_change_permission(self, request, obj=None):
-        return False
+        # Permission is required for the resolve action to be available on
+        # the changelist (obj is None). Object detail pages stay read-only
+        # because every field is in ``readonly_fields``.
+        return True
 
     def has_delete_permission(self, request, obj=None):
         return request.user.is_superuser

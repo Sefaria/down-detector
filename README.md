@@ -128,7 +128,7 @@ Key modules:
 | Model | Purpose | Notes |
 |---|---|---|
 | **`HealthCheck`** | One row per service per check cycle | The raw time-series. Pruned after `HEALTH_CHECK_RETENTION_DAYS`. |
-| **`Outage`** | One row per confirmed downtime period | `start_time` = first failure in the streak; closed on recovery. Drives accurate Slack downtime. |
+| **`Outage`** | One row per confirmed downtime period | `start_time` = first failure in the streak; closed on recovery. Drives accurate Slack downtime. Viewable in the admin and can be **force-resolved** if stuck (see [runbook](#operations--runbook)). |
 | **`Message`** | An operator-authored incident note shown on the status page | Severity `high` / `medium` / `resolved`; managed in Django admin. |
 
 ## Quick start (local development)
@@ -311,6 +311,7 @@ Dockerfile  docker-compose.yml  requirements.txt  .env.example
 - **A service is red but I think it's fine** — Check the scheduler logs (`docker compose logs scheduler`). The page only goes red after `failure_threshold` consecutive failures; confirm the health endpoint really returns the expected status.
 - **No Slack alerts** — Verify `SLACK_WEBHOOK_URL` is set in the `scheduler` service's environment; an empty value logs "skipping alert" and sends nothing.
 - **Post an incident banner** — `/admin/` → Incident Messages → add (severity `high` → "Major Outage", `medium` → "Partial Issues").
+- **A `recovered` outage is stuck open** (e.g. a recovery alert was missed) — `/admin/` → Outages → select it → **"Force-resolve selected outages"**. The scheduler reconciles with the database on its next cycle (≤ `HEALTH_CHECK_INTERVAL`): it clears its in-memory down state, and if the service is in fact still failing it opens a fresh outage and re-alerts. You never need to restart the scheduler to fix a dangling outage.
 - **Database growing** — `HealthCheck` rows are pruned daily; adjust `HEALTH_CHECK_RETENTION_DAYS` or run `cleanup_old_checks` manually.
 - **Tune noise** — Raise a service's `failure_threshold` in `base.py` if it flaps; lower it for faster paging.
 

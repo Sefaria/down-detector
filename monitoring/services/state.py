@@ -119,6 +119,20 @@ class StateTracker:
                     # Fallback to the latest check if we really couldn't find anything
                     if service_name not in self._outage_start_times:
                         self._outage_start_times[service_name] = health_check.checked_at
+
+                    # Ensure an unresolved Outage row exists for this
+                    # confirmed-down service. This upholds the invariant
+                    # "confirmed_down ⟺ an open Outage row" so that a later
+                    # cycle can tell when an outage was resolved out-of-band
+                    # (e.g. from the admin). It also gives the eventual
+                    # recovery alert an accurate downtime after a restart.
+                    start_time = self._outage_start_times[service_name]
+                    if not Outage.objects.filter(
+                        service_name=service_name, resolved=False
+                    ).exists():
+                        Outage.objects.create(
+                            service_name=service_name, start_time=start_time
+                        )
                 else:
                     self._failure_counts[service_name] = 0
                 logger.debug(
@@ -127,6 +141,49 @@ class StateTracker:
 
         self._initialized = True
         logger.info(f"StateTracker initialized with {len(self._states)} services")
+
+    def _reconcile_external_resolution(self, service_name: str) -> None:
+        """
+        Detect and absorb an outage that was resolved outside this process.
+
+        The scheduler holds outage state in memory, but an operator can
+        force-close an outage from the Django admin, which runs in a
+        separate web process and cannot touch this tracker's memory. When
+        that happens the unresolved ``Outage`` row disappears while this
+        tracker still believes the service is down.
+
+        Relying on the invariant that a confirmed-down service always has
+        an open ``Outage`` row (maintained by :meth:`initialize`,
+        ``went_down`` and ``recovered``), the absence of that row means the
+        outage was closed elsewhere. We then drop the stale in-memory
+        "down" bookkeeping so this cycle's result is evaluated from a clean
+        slate:
+
+        - if the service has genuinely recovered, the next "up" check is
+          treated as an already-resolved blip (no duplicate recovery alert);
+        - if the service is still failing, the normal threshold logic opens
+          a fresh ``Outage`` and re-alerts.
+
+        This keeps the database the single source of truth for whether a
+        service is currently in an outage, even across processes.
+        """
+        if service_name not in self._confirmed_down:
+            return
+
+        still_open = Outage.objects.filter(
+            service_name=service_name, resolved=False
+        ).exists()
+        if still_open:
+            return
+
+        logger.info(
+            f"Service {service_name}: outage resolved out-of-band "
+            f"(no open Outage row); clearing stale in-memory down state"
+        )
+        self._confirmed_down.discard(service_name)
+        self._states[service_name] = "up"
+        self._failure_counts[service_name] = 0
+        self._outage_start_times.pop(service_name, None)
 
     def get_state(self, service_name: str) -> str | None:
         """
@@ -162,6 +219,12 @@ class StateTracker:
         """
         service_name = result.service_name
         new_status = result.status
+
+        # If this outage was closed out-of-band (e.g. an operator resolved
+        # it from the admin), drop our stale in-memory "down" state before
+        # evaluating this result.
+        self._reconcile_external_resolution(service_name)
+
         old_status = self._states.get(service_name)
 
         # First time seeing this service — no transition
