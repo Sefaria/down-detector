@@ -1,10 +1,12 @@
 """
 Views for the status page.
 """
+import logging
 import random
 from datetime import timedelta
 
 from django.conf import settings
+from django.db import DatabaseError
 from django.db.models import Min, Q
 from django.http import HttpResponse, JsonResponse
 from django.templatetags.static import static
@@ -14,6 +16,8 @@ from django.shortcuts import render
 from django.urls import reverse
 
 from monitoring.models import HealthCheck, Message, Outage, Maintenance
+
+logger = logging.getLogger(__name__)
 
 
 # -- Status-page quotes (Hebrew, English, Sefaria ref, display source) ------
@@ -281,6 +285,18 @@ def _latest_check_iso(service_statuses: list[dict]) -> str:
     return max(check_times).isoformat() if check_times else ""
 
 
+def _format_seconds(total_seconds: int) -> str:
+    """Human-readable duration: '45s', '12m', '2h 5m'."""
+    total_seconds = max(0, total_seconds)
+    if total_seconds < 60:
+        return f"{total_seconds}s"
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, _ = divmod(remainder, 60)
+    if hours:
+        return f"{hours}h {minutes}m"
+    return f"{minutes}m"
+
+
 # Below this fraction of a day up, the day's bar is "down" (major); any
 # downtime above it is shown as "partial" (a minor blip).
 _UPTIME_PARTIAL_FLOOR = 0.99
@@ -482,51 +498,64 @@ def get_response_time_sparklines(
 def status_page(request):
     """
     Public status page showing service health and incidents.
+
+    A status page must survive its *own* database being down, so all DB access
+    is guarded: on a database error we serve a static "temporarily unavailable"
+    page (HTTP 200) instead of a 500.
     """
-    # Get service statuses, and attach a response-time sparkline to each.
-    service_statuses = get_service_statuses()
-    sparklines = get_response_time_sparklines()
-    for s in service_statuses:
-        s["sparkline"] = sparklines.get(s["name"])
+    og_image_url = request.build_absolute_uri(static("img/og-image.png"))
+    try:
+        # Get service statuses, and attach a response-time sparkline to each.
+        service_statuses = get_service_statuses()
+        sparklines = get_response_time_sparklines()
+        for s in service_statuses:
+            s["sparkline"] = sparklines.get(s["name"])
 
-    # Get active incidents
-    active_incidents = list(Message.objects.filter(active=True).order_by("-created_at"))
+        active_incidents = list(
+            Message.objects.filter(active=True).order_by("-created_at")
+        )
+        maintenance_windows = list(Maintenance.current_and_upcoming())
+        resolved_incidents = list(
+            Message.objects.filter(active=False).order_by("-updated_at")[:10]
+        )
+        # Attach a human-readable duration to each resolved incident.
+        for inc in resolved_incidents:
+            inc.duration_str = _format_seconds(
+                int((inc.updated_at - inc.created_at).total_seconds())
+            )
 
-    # Scheduled / in-progress maintenance windows
-    maintenance_windows = list(Maintenance.current_and_upcoming())
-    
-    # Get recent resolved incidents (last 7 days)
-    resolved_incidents = list(
-        Message.objects
-        .filter(active=False)
-        .order_by("-updated_at")[:10]
-    )
-    
-    # Calculate overall status
-    overall_status = get_overall_status(service_statuses, active_incidents)
-    status_label = get_status_label(overall_status)
-    quote = get_random_quote(overall_status)
+        overall_status = get_overall_status(service_statuses, active_incidents)
+        last_checked_iso = _latest_check_iso(service_statuses)
 
-    # Most recent check across all services, as an ISO-8601 string, so the
-    # page can show a truthful "last checked Ns ago" relative to real time
-    # (instead of a client-side counter that always starts at zero on load).
-    last_checked_iso = _latest_check_iso(service_statuses)
+        uptime_history = get_uptime_history()
+        uptime_values = [
+            h["uptime_pct"] for h in uptime_history if h["uptime_pct"] is not None
+        ]
+        overall_uptime = (
+            round(sum(uptime_values) / len(uptime_values), 2)
+            if uptime_values else None
+        )
+    except DatabaseError:
+        logger.exception("status_page: database unavailable; serving degraded page")
+        return render(request, "monitoring/unavailable.html",
+                      {"og_image_url": og_image_url})
 
     context = {
         "services": service_statuses,
         "active_incidents": active_incidents,
         "resolved_incidents": resolved_incidents,
         "overall_status": overall_status,
-        "status_label": status_label,
-        "quote": quote,
+        "status_label": get_status_label(overall_status),
+        "quote": get_random_quote(overall_status),
         "last_checked_iso": last_checked_iso,
-        "uptime_history": get_uptime_history(),
+        "uptime_history": uptime_history,
         "uptime_days": 90,
+        "overall_uptime": overall_uptime,
         "maintenance_windows": maintenance_windows,
         # Absolute URL for social-preview crawlers (they reject relative paths).
-        "og_image_url": request.build_absolute_uri(static("img/og-image.png")),
+        "og_image_url": og_image_url,
     }
-    
+
     return render(request, "monitoring/status.html", context)
 
 
@@ -535,31 +564,39 @@ def status_api(request):
     """
     Lightweight JSON snapshot of service health for live polling.
 
-    The status page polls this every ~30s and updates the DOM in place,
+    The status page polls this every ~20s and updates the DOM in place,
     instead of reloading the whole page. It returns only the fast-changing
     bits (per-service status + overall banner + last-checked); slow-changing
     content (incidents, quote, uptime history) is refreshed by a much less
     frequent full reload. Mirrors the same confirmation logic as the page so
-    the two never disagree.
+    the two never disagree. Degrades to an "unknown" snapshot if the DB is down.
     """
-    service_statuses = get_service_statuses()
-    active_incidents = list(Message.objects.filter(active=True))
-    overall_status = get_overall_status(service_statuses, active_incidents)
-
-    return JsonResponse({
-        "overall_status": overall_status,
-        "status_label": get_status_label(overall_status),
-        "last_checked": _latest_check_iso(service_statuses),
-        "services": [
-            {
-                "name": s["name"],
-                "status": s["status"],
-                "response_time_ms": s["response_time_ms"],
-                "detail": s["detail"],
-            }
-            for s in service_statuses
-        ],
-    })
+    try:
+        service_statuses = get_service_statuses()
+        active_incidents = list(Message.objects.filter(active=True))
+        overall_status = get_overall_status(service_statuses, active_incidents)
+        return JsonResponse({
+            "overall_status": overall_status,
+            "status_label": get_status_label(overall_status),
+            "last_checked": _latest_check_iso(service_statuses),
+            "services": [
+                {
+                    "name": s["name"],
+                    "status": s["status"],
+                    "response_time_ms": s["response_time_ms"],
+                    "detail": s["detail"],
+                }
+                for s in service_statuses
+            ],
+        })
+    except DatabaseError:
+        logger.exception("status_api: database unavailable")
+        return JsonResponse({
+            "overall_status": "unknown",
+            "status_label": "Status temporarily unavailable",
+            "last_checked": "",
+            "services": [],
+        })
 
 
 def healthz(request):

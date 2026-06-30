@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<!--
+  Degraded status page, served (HTTP 200) when the monitor's OWN database is
+  unreachable. Self-contained — no DB access — so the status page still loads
+  during the exact incident it exists to report on. Retries automatically.
+-->
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sefaria Status</title>
+    <meta name="description" content="Sefaria service status.">
+    <meta property="og:title" content="Sefaria Status">
+    <meta property="og:type" content="website">
+    <meta property="og:image" content="{{ og_image_url }}">
+    <meta name="theme-color" content="#18345D">
+    <style>
+        body {
+            margin: 0;
+            font-family: Georgia, "Times New Roman", serif;
+            background: #FBFBFA;
+            color: #333331;
+            display: flex;
+            min-height: 100vh;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+        }
+        .bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 8px;
+            background: linear-gradient(90deg, #00505E, #5698B4, #CCB37C, #5B9370,
+                    #823241, #5A4474, #AD4F66, #7285A6, #00807E, #4872B3);
+        }
+        .box { padding: 2rem; max-width: 34rem; }
+        h1 { color: #18345D; font-size: 1.8rem; margin: 0 0 0.75rem; }
+        p { font-family: Arial, sans-serif; color: #666664; line-height: 1.6; }
+    </style>
+</head>
+
+<body>
+    <div class="bar"></div>
+    <div class="box">
+        <h1>Status temporarily unavailable</h1>
+        <p>We can't load live status right now. This page will refresh automatically.</p>
+    </div>
+    <script>setTimeout(function () { window.location.reload(); }, 30000);</script>
+</body>
+
+</html>

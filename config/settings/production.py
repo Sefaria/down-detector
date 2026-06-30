@@ -48,7 +48,7 @@ SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 # requests (so no redirect loop). The container's loopback /healthz probe is
 # exempted so it isn't bounced to https on an internal http call.
 SECURE_SSL_REDIRECT = env.bool("SECURE_SSL_REDIRECT", default=True)
-SECURE_REDIRECT_EXEMPT = [r"^healthz$"]
+SECURE_REDIRECT_EXEMPT = [r"^healthz/?$"]
 
 # Send the Referer only to same-origin destinations (Django default since 3.1,
 # set explicitly for clarity).
