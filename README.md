@@ -97,7 +97,7 @@ The system runs as **two long-lived processes** plus an on-demand maintenance jo
 ```
                           ┌──────────────────────────────────────────┐
                           │              PostgreSQL                   │
-                          │   HealthCheck · Outage · Message tables   │
+                          │ HealthCheck·Outage·Message·Maintenance    │
                           └──────────────────────────────────────────┘
                               ▲                              ▲
               writes results  │                              │  reads latest state
