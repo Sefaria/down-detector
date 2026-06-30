@@ -7,6 +7,12 @@ from .base import *  # noqa: F401, F403
 
 DEBUG = False
 
+# Require a real SECRET_KEY in production — never fall back to the insecure
+# development default (base.py). Missing/empty raises ImproperlyConfigured at
+# startup, which is what we want: fail loudly rather than run with a known key.
+# Generate one with: python -c "from django.core.management.utils import get_random_secret_key as g; print(g())"
+SECRET_KEY = env("SECRET_KEY")  # noqa: F405
+
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["status.sefaria.org"])  # noqa: F405
 
 # Always permit loopback so the container HEALTHCHECK (curl http://localhost
@@ -36,6 +42,17 @@ SECURE_HSTS_PRELOAD = True
 
 # Proxy configuration
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+# Redirect any plain-HTTP request to HTTPS. Safe behind the TLS-terminating
+# proxy because SECURE_PROXY_SSL_HEADER lets Django recognize already-secure
+# requests (so no redirect loop). The container's loopback /healthz probe is
+# exempted so it isn't bounced to https on an internal http call.
+SECURE_SSL_REDIRECT = env.bool("SECURE_SSL_REDIRECT", default=True)
+SECURE_REDIRECT_EXEMPT = [r"^healthz$"]
+
+# Send the Referer only to same-origin destinations (Django default since 3.1,
+# set explicitly for clarity).
+SECURE_REFERRER_POLICY = "same-origin"
 
 # CSRF settings
 CSRF_COOKIE_SECURE = env.bool("CSRF_COOKIE_SECURE", default=True)
