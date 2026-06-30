@@ -120,6 +120,11 @@
                         {% if service.response_time_ms %}
                         <span class="response-time">{{ service.response_time_ms }}ms</span>
                         {% endif %}
+                        {% elif service.status == 'degraded' %}
+                        <span class="status-badge status-degraded">Degraded</span>
+                        {% if service.response_time_ms %}
+                        <span class="response-time">{{ service.response_time_ms }}ms</span>
+                        {% endif %}
                         {% elif service.status == 'down' %}
                         <span class="status-badge status-down">Down</span>
                         {% if service.detail %}
@@ -271,8 +276,9 @@
 
             // ---- In-place updates from the JSON snapshot ----------------------
             function serviceStatusHTML(s) {
-                if (s.status === 'up') {
-                    let h = '<span class="status-badge status-up">Operational</span>';
+                if (s.status === 'up' || s.status === 'degraded') {
+                    const label = s.status === 'degraded' ? 'Degraded' : 'Operational';
+                    let h = '<span class="status-badge status-' + s.status + '">' + label + '</span>';
                     if (s.response_time_ms) {
                         h += '<span class="response-time">' + s.response_time_ms + 'ms</span>';
                     }

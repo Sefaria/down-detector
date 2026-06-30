@@ -149,6 +149,52 @@ class TestStatusApi:
         assert svc["detail"] == "Service unreachable"
 
 
+class TestDegradedState:
+    """A slow-but-up service is shown as degraded (page-only, no Slack)."""
+
+    def test_slow_service_is_degraded(self, client, settings):
+        service_name = settings.MONITORED_SERVICES[0]["name"]
+        threshold = settings.MONITORED_SERVICES[0].get("failure_threshold", 2)
+        slow = settings.DEGRADED_RESPONSE_MS + 1000
+
+        for _ in range(threshold):
+            HealthCheckFactory(
+                service_name=service_name, status="up", response_time_ms=slow
+            )
+
+        data = client.get(reverse("monitoring:status_api")).json()
+        svc = next(s for s in data["services"] if s["name"] == service_name)
+
+        assert svc["status"] == "degraded"
+        assert data["overall_status"] == "degraded"
+        assert data["status_label"] == "Degraded Performance"
+
+    def test_fast_service_is_operational(self, client, settings):
+        service_name = settings.MONITORED_SERVICES[0]["name"]
+        threshold = settings.MONITORED_SERVICES[0].get("failure_threshold", 2)
+
+        for _ in range(threshold):
+            HealthCheckFactory(
+                service_name=service_name, status="up", response_time_ms=120
+            )
+
+        svc = next(
+            s for s in client.get(reverse("monitoring:status_api")).json()["services"]
+            if s["name"] == service_name
+        )
+        assert svc["status"] == "up"
+
+    def test_overall_partial_when_some_down(self, client, settings):
+        """Some-but-not-all services down => partial; all down => major."""
+        from monitoring.views import get_overall_status
+
+        statuses_some = [{"status": "down"}, {"status": "up"}]
+        assert get_overall_status(statuses_some, []) == "partial"
+
+        statuses_all = [{"status": "down"}, {"status": "down"}]
+        assert get_overall_status(statuses_all, []) == "major"
+
+
 class TestPublicErrorSanitization:
     """The public page must never echo raw internal error detail."""
 

@@ -156,6 +156,9 @@ MONITORED_SERVICES = [
             "poll_interval": 1,
         },
         "failure_threshold": 3,
+        # The two-phase Linker check is intrinsically slower (~1.2s) than a
+        # plain ping, so it gets a higher "degraded" threshold than the default.
+        "degraded_threshold_ms": 4000,
     },
 ]
 
@@ -168,6 +171,12 @@ HEALTH_CHECK_RETRY_DELAY = env.int("HEALTH_CHECK_RETRY_DELAY", default=10)
 
 # Consecutive failure threshold (default for services without per-service config)
 ALERT_AFTER_CONSECUTIVE_FAILURES = env.int("ALERT_AFTER_CONSECUTIVE_FAILURES", default=2)
+
+# A service that is up but whose latest response time exceeds this many
+# milliseconds is shown as "Degraded Performance" on the status page. This is
+# a page-only signal (it does NOT send a Slack alert). Override per service
+# with "degraded_threshold_ms" in MONITORED_SERVICES.
+DEGRADED_RESPONSE_MS = env.int("DEGRADED_RESPONSE_MS", default=2000)
 
 # Slack configuration
 SLACK_WEBHOOK_URL = env("SLACK_WEBHOOK_URL", default="")

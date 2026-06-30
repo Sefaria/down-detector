@@ -106,6 +106,7 @@ QUOTES_MAJOR = [
 
 QUOTES_BY_STATUS = {
     "operational": QUOTES_OPERATIONAL,
+    "degraded": QUOTES_PARTIAL,
     "partial": QUOTES_PARTIAL,
     "major": QUOTES_MAJOR,
 }
@@ -158,6 +159,7 @@ def get_service_statuses() -> list[dict]:
     default_threshold = getattr(
         settings, "ALERT_AFTER_CONSECUTIVE_FAILURES", 2
     )
+    default_degraded_ms = getattr(settings, "DEGRADED_RESPONSE_MS", 2000)
     statuses = []
 
     for config in services:
@@ -189,7 +191,23 @@ def get_service_statuses() -> list[dict]:
             len(recent_checks) >= threshold
             and all(c.status == "down" for c in recent_checks)
         )
-        confirmed_status = "down" if all_down else "up"
+
+        # A confirmed-up service whose latest response time exceeds the
+        # degraded threshold is shown as "degraded" (up but slow). This is a
+        # page-only signal and never triggers a Slack alert.
+        degraded_ms = config.get("degraded_threshold_ms", default_degraded_ms)
+        rt = latest_check.response_time_ms
+        if all_down:
+            confirmed_status = "down"
+            detail = get_public_status_detail(
+                latest_check.error_message, latest_check.status_code
+            )
+        elif latest_check.status == "up" and rt and rt > degraded_ms:
+            confirmed_status = "degraded"
+            detail = f"Elevated response time ({rt}ms)"
+        else:
+            confirmed_status = "up"
+            detail = ""
 
         statuses.append({
             "name": service_name,
@@ -198,13 +216,7 @@ def get_service_statuses() -> list[dict]:
             "last_checked": latest_check.checked_at,
             "status_code": latest_check.status_code,
             # Public, sanitized hint only — never the raw internal error.
-            "detail": (
-                get_public_status_detail(
-                    latest_check.error_message, latest_check.status_code
-                )
-                if all_down
-                else ""
-            ),
+            "detail": detail,
         })
 
     return statuses
@@ -213,24 +225,29 @@ def get_service_statuses() -> list[dict]:
 def get_overall_status(service_statuses: list[dict], active_incidents: list) -> str:
     """
     Determine the overall system status.
-    
-    Returns one of: "operational", "partial", "major"
+
+    Returns one of: "operational", "degraded", "partial", "major".
+
+    - "major"      — a high-severity incident, or *every* service is down.
+    - "partial"    — some (but not all) services are down.
+    - "degraded"   — nothing down, but a service is slow or a medium-severity
+                     incident is active.
+    - "operational"— everything healthy.
     """
-    # Check for high severity active incidents
+    statuses = [s["status"] for s in service_statuses]
+    total = len(statuses)
+    down = sum(1 for s in statuses if s == "down")
+    degraded = sum(1 for s in statuses if s == "degraded")
+
     has_high_incident = any(i.severity == "high" for i in active_incidents)
-    if has_high_incident:
-        return "major"
-    
-    # Check for any services down
-    any_down = any(s["status"] == "down" for s in service_statuses)
-    if any_down:
-        return "major"
-    
-    # Check for medium severity incidents
     has_medium_incident = any(i.severity == "medium" for i in active_incidents)
-    if has_medium_incident:
+
+    if has_high_incident or (total > 0 and down == total):
+        return "major"
+    if down > 0:
         return "partial"
-    
+    if degraded > 0 or has_medium_incident:
+        return "degraded"
     return "operational"
 
 
@@ -238,8 +255,10 @@ def get_status_label(overall_status: str) -> str:
     """Convert status code to human-readable label."""
     return {
         "operational": "All Systems Operational",
-        "partial": "Partial Issues",
+        "degraded": "Degraded Performance",
+        "partial": "Partial Outage",
         "major": "Major Outage",
+        "maintenance": "Under Maintenance",
     }.get(overall_status, "Unknown")
 
 
