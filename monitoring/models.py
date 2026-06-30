@@ -80,8 +80,15 @@ class Maintenance(models.Model):
     suppressed (planned work should not page anyone). Authored in the admin.
     """
 
-    title = models.CharField(max_length=200)
-    description = models.TextField(blank=True, default="")
+    title = models.CharField(
+        max_length=200,
+        help_text="Short summary shown on the status page, e.g. 'Database upgrade'.",
+    )
+    description = models.TextField(
+        blank=True,
+        default="",
+        help_text="Optional detail shown beneath the title on the status page.",
+    )
     affected_services = models.TextField(
         blank=True,
         default="",
@@ -90,8 +97,15 @@ class Maintenance(models.Model):
             "(e.g. 'MCP Server, Linker'). Leave blank to cover all services."
         ),
     )
-    start_time = models.DateTimeField(db_index=True)
-    end_time = models.DateTimeField()
+    start_time = models.DateTimeField(
+        db_index=True,
+        help_text=(
+            "When the window begins (UTC). While now is between start and end, "
+            "affected services show 'Under Maintenance' and their alerts are "
+            "suppressed."
+        ),
+    )
+    end_time = models.DateTimeField(help_text="When the window ends (UTC).")
     active = models.BooleanField(
         default=True,
         db_index=True,
@@ -168,9 +182,19 @@ class Message(models.Model):
         ("resolved", "Resolved"),
     ]
 
-    severity = models.CharField(max_length=20, choices=SEVERITY_CHOICES)
-    text = models.TextField()
-    active = models.BooleanField(default=True, db_index=True)
+    severity = models.CharField(
+        max_length=20,
+        choices=SEVERITY_CHOICES,
+        help_text="High shows the banner as a Major Outage; Medium as Degraded Performance.",
+    )
+    text = models.TextField(
+        help_text="Shown verbatim on the public status page and in the RSS/Atom feed.",
+    )
+    active = models.BooleanField(
+        default=True,
+        db_index=True,
+        help_text="Uncheck (or use the 'mark resolved' action) to move this into history.",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

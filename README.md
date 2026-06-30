@@ -22,6 +22,7 @@ A small, self-contained Django application that checks Sefaria's services on a f
 - [Configuration](#configuration)
 - [Management commands](#management-commands)
 - [The status page](#the-status-page)
+- [Admin access & security](#admin-access--security)
 - [Deployment](#deployment)
 - [Testing](#testing)
 - [Project structure](#project-structure)
@@ -263,6 +264,26 @@ Cleanup runs automatically inside the scheduler; the standalone command exists f
 - **SEO** — Open Graph + Twitter cards, JSON-LD, `robots.txt`, and `sitemap.xml`, targeting the query "is Sefaria down".
 
 To post an incident: log into `/admin/`, add a `Message` (severity high/medium), and it appears immediately. Mark it resolved via the bulk admin action. To schedule maintenance, add a `Maintenance Window` (title, affected services, start/end) — affected services then show "Under Maintenance" and their Slack alerts are suppressed for the duration.
+
+## Admin access & security
+
+The operator console is the standard Django admin at **`/admin/`** — i.e. `https://status.sefaria.org/admin/` in production, or `http://localhost:8000/admin/` locally. Log in with a Django **superuser**, created with:
+
+```bash
+python manage.py createsuperuser          # local
+# in production, run inside the web container, e.g.:
+docker compose exec web python manage.py createsuperuser
+```
+
+From there operators post incident `Message`s, schedule `Maintenance` windows, force-resolve stuck `Outage`s, and read the raw `HealthCheck` history. Each screen carries inline help describing what it does.
+
+**Is it safe to leave `/admin/` publicly reachable?** Yes, with the defaults this project ships — but understand the trade-off:
+
+- It is gated by Django authentication (login required), and production enables HTTPS, secure + `HttpOnly` session/CSRF cookies, HSTS, `X-Frame-Options: DENY`, and content-type/XSS protections (see [`config/settings/production.py`](config/settings/production.py)).
+- The blast radius is small: the admin only edits incident/maintenance content and reads monitoring data. It **cannot** change what is monitored or any thresholds — those live in [`config/settings/base.py`](config/settings/base.py) and ship with the image.
+- The main risk of a public, default-path admin is automated credential-stuffing/bot noise against the login page. Mitigate by: using a **strong, unique superuser password** and few accounts; optionally restricting `/admin/` by IP or basic-auth at the Coolify/Traefik proxy, moving it off the default path, or adding 2FA (`django-otp`) / login rate-limiting if you want defense in depth.
+
+If you'd rather not expose it at all, put `/admin/` behind the proxy's IP allowlist or a VPN — the public status page and its JSON/RSS endpoints don't depend on the admin.
 
 ## Deployment
 

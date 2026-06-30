@@ -10,6 +10,14 @@ from .models import HealthCheck, Outage, Message, Maintenance
 
 logger = logging.getLogger(__name__)
 
+# Brand the admin so it's obviously the status monitor, not a generic Django site.
+admin.site.site_header = "Sefaria Status — Administration"
+admin.site.site_title = "Sefaria Status Admin"
+admin.site.index_title = (
+    "Monitoring data. Health checks and outages are recorded automatically; "
+    "incident messages and maintenance windows are authored here."
+)
+
 
 @admin.register(HealthCheck)
 class HealthCheckAdmin(admin.ModelAdmin):
@@ -26,6 +34,7 @@ class HealthCheckAdmin(admin.ModelAdmin):
     search_fields = ["service_name", "error_message"]
     date_hierarchy = "checked_at"
     ordering = ["-checked_at"]
+    list_per_page = 50
 
     # Health checks are system-generated, not manually edited
     def has_add_permission(self, request):
@@ -76,6 +85,22 @@ class OutageAdmin(admin.ModelAdmin):
         "created_at",
         "updated_at",
     ]
+
+    fieldsets = (
+        (None, {
+            "fields": (
+                "service_name", "start_time", "end_time", "resolved",
+                "duration_display", "created_at", "updated_at",
+            ),
+            "description": (
+                "Outages are opened and closed automatically by the scheduler. "
+                "These fields are read-only. To clear a stuck-open outage (e.g. a "
+                "recovery was missed), select it in the list and run "
+                "<strong>Force-resolve selected outages</strong> — the scheduler "
+                "reconciles on its next cycle."
+            ),
+        }),
+    )
 
     @admin.display(description="Duration")
     def duration_display(self, obj):
@@ -156,6 +181,26 @@ class MaintenanceAdmin(admin.ModelAdmin):
     ordering = ["-start_time"]
     list_editable = ["active"]
 
+    fieldsets = (
+        (None, {
+            "fields": ("title", "description"),
+            "description": "Shown on the public status page while the window is current or upcoming.",
+        }),
+        ("Scope", {
+            "fields": ("affected_services",),
+            "description": "Which services this covers. Leave blank to cover every monitored service.",
+        }),
+        ("Schedule", {
+            "fields": ("start_time", "end_time", "active"),
+            "description": (
+                "All times UTC. While now is between start and end (and active is "
+                "on), covered services show <strong>Under Maintenance</strong> and "
+                "their Slack down/recovery alerts are suppressed. Uncheck "
+                "<strong>active</strong> to cancel without deleting."
+            ),
+        }),
+    )
+
     @admin.display(description="State")
     def state(self, obj):
         """In progress / Scheduled / Past, at a glance."""
@@ -178,6 +223,19 @@ class MessageAdmin(admin.ModelAdmin):
     search_fields = ["text"]
     ordering = ["-created_at"]
     actions = ["mark_as_resolved"]
+
+    fieldsets = (
+        (None, {
+            "fields": ("severity", "text", "active"),
+            "description": (
+                "Incident banners shown on the public status page (and the "
+                "RSS/Atom feed). <strong>High</strong> drives a Major Outage "
+                "banner, <strong>Medium</strong> a Degraded Performance banner. "
+                "Uncheck <strong>active</strong> (or use the resolve action) to "
+                "move an incident into the history section."
+            ),
+        }),
+    )
 
     @admin.display(description="Message")
     def text_preview(self, obj):
