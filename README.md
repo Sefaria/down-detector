@@ -4,7 +4,7 @@ Real-time uptime monitoring and a public status page for Sefaria's critical serv
 
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://python.org)
 [![Django 5.2](https://img.shields.io/badge/django-5.2-green.svg)](https://djangoproject.com)
-[![Tests](https://img.shields.io/badge/tests-83%20passing-brightgreen.svg)](#testing)
+[![Tests](https://img.shields.io/badge/tests-149%20passing-brightgreen.svg)](#testing)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 A small, self-contained Django application that checks Sefaria's services on a fixed interval, records every result, confirms outages before alerting (to filter out brief blips), posts rich [Slack](https://slack.com) notifications when a service goes down or recovers, and renders a public, SEO-optimized status page.
@@ -253,14 +253,16 @@ Cleanup runs automatically inside the scheduler; the standalone command exists f
 - **Design** — A light, scholarly theme matching Sefaria's real brand: warm off-white background (`#FBFBFA`), serif headings, navy (`#18345D`) and gold (`#CCB479`) accents, the signature category-color top line, and gently rounded cards. Fonts are Roboto (UI) + Crimson Text (Sefaria's own Adobe Garamond fallback), loaded with system fallbacks so the page never blocks on the network. Tokens live at the top of [`style.css`](monitoring/static/monitoring/style.css); swap the `--font-serif` stack to Adobe Garamond via Typekit for an exact brand match.
 - **Overall banner** — `All Systems Operational` / `Degraded Performance` / `Partial Outage` / `Major Outage`, computed from confirmed service states *and* active incident severity. *Major* = a high-severity incident or every service down; *partial* = some (not all) services down; *degraded* = nothing down but something slow or a medium-severity incident.
 - **Per-service list** — Operational / Degraded / Down / Unknown, with last response time. "Down" requires the last `failure_threshold` checks to all fail (mirrors the alert logic so the page and Slack never disagree). "Degraded" means up but the latest response time exceeds `DEGRADED_RESPONSE_MS` (per-service override `degraded_threshold_ms`) — a page-only signal that never pages Slack. A down service's tooltip shows a *sanitized* hint (e.g. "Service unreachable", "Unexpected response (HTTP 521)") — never the raw internal error, which stays in the admin.
-- **90-day uptime timeline** — Per-service daily bars (up / partial / down / no-data) with an overall uptime %, computed from `Outage` records (true downtime, not pruned like raw checks). Days before a service was first monitored show as "no data" rather than fake green. See `get_uptime_history` in [`views.py`](monitoring/views.py).
+- **90-day uptime timeline** — Per-service daily bars (up / partial / down / no-data) with a visible color **legend**, a per-service uptime %, and an **aggregate "% overall"**, computed from `Outage` records (true downtime, not pruned like raw checks). Days before a service was first monitored show as "no data" rather than fake green. See `get_uptime_history` in [`views.py`](monitoring/views.py).
 - **Response-time sparkline** — A small inline-SVG latency trend per service (last 24h, newest 40 samples) with a min/max/latest tooltip. Latency spikes read as upward peaks. Geometry is computed server-side in `get_response_time_sparklines` ([`views.py`](monitoring/views.py)) — no charting library or client-side work.
 - **Status-aware Tanakh verse** — A Hebrew + English verse, with a deep link to Sefaria, chosen from a pool that matches the current status (reassuring when up, hopeful during an outage). Defined in [`views.py`](monitoring/views.py).
 - **Incidents** — Operator-posted `Message` records (active + recent history), authored in the Django admin.
 - **Scheduled maintenance** — Operator-posted `Maintenance` windows (title, description, affected services, start/end). While a window is in progress, affected services show "Under Maintenance" and their Slack alerts are suppressed (planned work shouldn't page anyone); the scheduler still records state. A blank "affected services" covers everything.
 - **Dynamic favicon** — A colored status dot (SVG) reflects the overall status.
 - **Live updates** — The page polls a cached `/api/status/` JSON endpoint every 30s and patches the banner and per-service rows in place; a slow 5-minute full reload picks up incidents, the quote, and uptime history. The page view and API are both cached for a short TTL (`@cache_page`).
-- **Incident feeds** — RSS (`/history.rss`) and Atom (`/history.atom`) feeds of the incident history, built on Django's syndication framework and advertised for autodiscovery. See [`feeds.py`](monitoring/feeds.py).
+- **Incident feeds** — RSS (`/history.rss`) and Atom (`/history.atom`) feeds of the incident history, built on Django's syndication framework, advertised for autodiscovery, and surfaced via a visible "Subscribe to updates" affordance. See [`feeds.py`](monitoring/feeds.py). Resolved incidents show their duration; all times are labelled UTC. When there are no incidents, the page shows an explicit "No incidents reported recently" reassurance.
+- **Accessibility** — Status is conveyed by text labels as well as color; the overall banner is an `aria-live` region so screen readers hear status changes; the uptime bars are reachable as a labelled image (not hover-only); `prefers-reduced-motion` disables the pulsing dots; contrast meets WCAG AA.
+- **Resilient by design** — The page survives the monitor's *own* database being down: all DB access is guarded, and a static, DB-free degraded page (and `unknown` JSON) is served instead of a 500. Self-contained `404`/`500` pages too.
 - **SEO & social preview** — Open Graph + Twitter cards (with an **absolute** 1200×630 preview image so crawlers actually render it), `theme-color`, JSON-LD, `robots.txt`, and `sitemap.xml`, targeting the query "is Sefaria down". Regenerate the preview image with `python scripts/generate_og_image.py` (needs `pip install Pillow`; dev-only, not a runtime dependency).
 
 To post an incident: log into `/admin/`, add a `Message` (severity high/medium), and it appears immediately. Mark it resolved via the bulk admin action. To schedule maintenance, add a `Maintenance Window` (title, affected services, start/end) — affected services then show "Under Maintenance" and their Slack alerts are suppressed for the duration.
@@ -320,7 +322,7 @@ docker compose logs -f scheduler
 
 ## Testing
 
-140 tests cover the checker, state machine, alerter, scheduler, models, admin (incl. the dashboard, Operators group, and maintenance validation), cleanup, views, uptime history, response-time sparklines, degraded states, maintenance windows, incident feeds, and SEO.
+149 tests cover the checker, state machine, alerter, scheduler, models, admin (incl. the dashboard, Operators group, and maintenance validation), cleanup, views, uptime history, response-time sparklines, degraded states, maintenance windows, incident feeds, and SEO.
 
 ```bash
 # All tests (uses config.settings.test via pytest.ini)
@@ -357,7 +359,7 @@ monitoring/
   templates/ static/ migrations/   (incl. admin dashboard templates, Operators group migration)
 scripts/
   web-entrypoint.sh  release flow for the web container (migrate, collectstatic, gunicorn)
-tests/               140 tests + factories + fixtures
+tests/               149 tests + factories + fixtures
 Dockerfile  docker-compose.yml  requirements.txt  .env.example  .gitattributes
 ```
 

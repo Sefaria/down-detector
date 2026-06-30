@@ -97,6 +97,36 @@ class TestStatusPageLogic:
         assert "All Systems Operational" in content
 
 
+class TestDisplayAndAccessibility:
+    """Regression guards for the status-page completeness/a11y additions."""
+
+    def test_format_seconds(self):
+        from monitoring.views import _format_seconds
+        assert _format_seconds(30) == "30s"
+        assert _format_seconds(90) == "1m"
+        assert _format_seconds(3 * 3600 + 5 * 60) == "3h 5m"
+        assert _format_seconds(-10) == "0s"
+
+    def test_banner_is_an_aria_live_region(self, client, settings):
+        from tests.factories import HealthCheckFactory
+        HealthCheckFactory(service_name=settings.MONITORED_SERVICES[0]["name"], status="up")
+        content = client.get(reverse("monitoring:status")).content.decode()
+        assert 'role="status"' in content and 'aria-live="polite"' in content
+
+    def test_uptime_legend_and_aria(self, client, settings):
+        from tests.factories import HealthCheckFactory
+        HealthCheckFactory(service_name=settings.MONITORED_SERVICES[0]["name"], status="up")
+        content = client.get(reverse("monitoring:status")).content.decode()
+        assert "uptime-legend" in content        # visible legend, not hover-only
+        assert 'class="uptime-bars" role="img"' in content  # SR-reachable bars
+
+    def test_empty_state_is_reassuring(self, client, settings):
+        from tests.factories import HealthCheckFactory
+        HealthCheckFactory(service_name=settings.MONITORED_SERVICES[0]["name"], status="up")
+        content = client.get(reverse("monitoring:status")).content.decode()
+        assert "No incidents reported recently" in content
+
+
 class TestHealthz:
     """The container liveness probe."""
 

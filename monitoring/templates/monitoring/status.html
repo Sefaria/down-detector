@@ -87,7 +87,7 @@
                 </a>
                 <h1>Status</h1>
             </div>
-            <p class="subtitle">Live status of Sefaria's services. This page updates automatically.</p>
+            <p class="subtitle">Live status of {% for s in services %}{{ s.name }}{% if not forloop.last %}, {% endif %}{% endfor %}. Updates automatically; times in UTC.</p>
         </header>
 
         <!-- Overall Status Banner -->
@@ -96,8 +96,8 @@
                 <div class="status-indicator">
                     <span class="status-dot {% if overall_status != 'operational' %}pulse{% endif %}"></span>
                 </div>
-                <span class="status-text">{{ status_label }}</span>
-                <span class="last-updated">Last checked: <time id="last-checked" data-checked="{{ last_checked_iso }}">just now</time></span>
+                <span class="status-text" role="status" aria-live="polite">{{ status_label }}</span>
+                <span class="last-updated">Last checked: <time id="last-checked" data-checked="{{ last_checked_iso }}" aria-hidden="true">just now</time></span>
             </div>
             <div class="status-quote">
                 <span class="quote-hebrew" lang="he">{{ quote.hebrew }}</span>
@@ -188,7 +188,7 @@
         <!-- Uptime History -->
         {% if uptime_history %}
         <section class="uptime">
-            <h2>Uptime <span class="uptime-window">last {{ uptime_days }} days</span></h2>
+            <h2>Uptime <span class="uptime-window">last {{ uptime_days }} days{% if overall_uptime is not None %} &middot; {{ overall_uptime }}% overall{% endif %}</span></h2>
             <div class="uptime-list">
                 {% for svc in uptime_history %}
                 <div class="uptime-row">
@@ -198,9 +198,10 @@
                             {% if svc.uptime_pct is not None %}{{ svc.uptime_pct }}% uptime{% else %}No data yet{% endif %}
                         </span>
                     </div>
-                    <div class="uptime-bars">
+                    <div class="uptime-bars" role="img"
+                        aria-label="{{ svc.name }}: {% if svc.uptime_pct is not None %}{{ svc.uptime_pct }}% uptime over the last {{ uptime_days }} days{% else %}no uptime data yet{% endif %}">
                         {% for d in svc.days %}
-                        <span class="uptime-bar status-{{ d.status }}"
+                        <span class="uptime-bar status-{{ d.status }}" aria-hidden="true"
                             title="{{ d.date }}{% if d.uptime is not None %}: {{ d.uptime }}% uptime{% else %}: no data{% endif %}"></span>
                         {% endfor %}
                     </div>
@@ -209,6 +210,12 @@
                 <div class="uptime-axis">
                     <span>{{ uptime_days }} days ago</span>
                     <span>today</span>
+                </div>
+                <div class="uptime-legend" aria-hidden="true">
+                    <span class="uptime-key"><i class="sw status-up"></i> Operational</span>
+                    <span class="uptime-key"><i class="sw status-partial"></i> Partial</span>
+                    <span class="uptime-key"><i class="sw status-down"></i> Major outage</span>
+                    <span class="uptime-key"><i class="sw status-nodata"></i> No data</span>
                 </div>
             </div>
         </section>
@@ -224,11 +231,11 @@
                     <span class="severity-badge">{{ incident.get_severity_display }}</span>
                     <div class="incident-times">
                         <time datetime="{{ incident.created_at|date:'c' }}">
-                            Created: {{ incident.created_at|date:"M j, Y g:i A" }}
+                            Created: {{ incident.created_at|date:"M j, Y g:i A" }} UTC
                         </time>
                         {% if incident.updated_at != incident.created_at %}
                         <time datetime="{{ incident.updated_at|date:'c' }}" class="updated-time">
-                            Updated: {{ incident.updated_at|date:"M j, Y g:i A" }}
+                            Updated: {{ incident.updated_at|date:"M j, Y g:i A" }} UTC
                         </time>
                         {% endif %}
                     </div>
@@ -246,13 +253,13 @@
             {% for incident in resolved_incidents %}
             <div class="incident severity-resolved">
                 <div class="incident-header">
-                    <span class="severity-badge resolved">Resolved</span>
+                    <span class="severity-badge resolved">Resolved{% if incident.duration_str %} &middot; {{ incident.duration_str }}{% endif %}</span>
                     <div class="incident-times">
                         <time datetime="{{ incident.created_at|date:'c' }}">
-                            Created: {{ incident.created_at|date:"M j, Y g:i A" }}
+                            Created: {{ incident.created_at|date:"M j, Y g:i A" }} UTC
                         </time>
                         <time datetime="{{ incident.updated_at|date:'c' }}" class="updated-time">
-                            Resolved: {{ incident.updated_at|date:"M j, Y g:i A" }}
+                            Resolved: {{ incident.updated_at|date:"M j, Y g:i A" }} UTC
                         </time>
                     </div>
                 </div>
@@ -261,6 +268,22 @@
             {% endfor %}
         </section>
         {% endif %}
+
+        <!-- Reassuring empty state when there's nothing to report -->
+        {% if not active_incidents and not resolved_incidents %}
+        <section class="incidents">
+            <h2>Incidents</h2>
+            <p class="no-incidents">No incidents reported recently. All clear.</p>
+        </section>
+        {% endif %}
+
+        <!-- Subscribe -->
+        <section class="subscribe">
+            <p>Subscribe to updates:
+                <a href="{% url 'monitoring:incident_feed_rss' %}">RSS</a> &middot;
+                <a href="{% url 'monitoring:incident_feed_atom' %}">Atom</a>
+            </p>
+        </section>
 
         <footer>
             <div class="footer-links">

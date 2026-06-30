@@ -21,7 +21,8 @@
     --border-strong: #E0E0DE;
     --text: #333331;
     --text-muted: #666664;
-    --text-faint: #8A8A87;
+    /* Darkened from #8A8A87 to meet WCAG AA (>=4.5:1) for small text on #FBFBFA. */
+    --text-faint: #6E6E6B;
 
     /* Status colors (from Sefaria's category palette), tuned for contrast
        on a light background. Dot/bar use the vivid hue; *-text is darkened
@@ -572,6 +573,61 @@ header .subtitle {
     color: var(--text-faint);
     font-size: 0.7rem;
 }
+
+.uptime-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 1.1rem;
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border);
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
+.uptime-key {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.uptime-key .sw {
+    width: 11px;
+    height: 11px;
+    border-radius: 2px;
+    display: inline-block;
+}
+
+.uptime-key .sw.status-up { background: var(--status-up); }
+.uptime-key .sw.status-partial { background: var(--status-degraded); }
+.uptime-key .sw.status-down { background: var(--status-down); }
+.uptime-key .sw.status-nodata { background: var(--border-strong); }
+
+/* Reassuring empty state */
+.no-incidents {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--status-up);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-soft);
+    padding: 1rem 1.25rem;
+    color: var(--text-muted);
+    font-size: 0.92rem;
+}
+
+/* Subscribe */
+.subscribe {
+    margin-bottom: 2rem;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+.subscribe a {
+    color: var(--sefaria-link);
+    text-decoration: none;
+}
+
+.subscribe a:hover { text-decoration: underline; }
 
 /* Incidents & Maintenance */
 .incidents,
