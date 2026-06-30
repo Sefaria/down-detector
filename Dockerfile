@@ -56,9 +56,11 @@ USER appuser
 # Expose port
 EXPOSE 8000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/ || exit 1
+# Health check — hit the lightweight /healthz (no DB, no page render). The
+# start period covers the release steps (migrate + collectstatic) before
+# gunicorn binds.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=5 \
+    CMD curl -f http://localhost:8000/healthz || exit 1
 
 # Default command - release steps (migrate, collectstatic, deploy checks)
 # then gunicorn. See scripts/web-entrypoint.sh. The scheduler and cleanup

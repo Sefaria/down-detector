@@ -54,13 +54,15 @@ services:
       - SLACK_CHANNEL=${SLACK_CHANNEL:-sefaria-down}
       - STATUS_PAGE_URL=${STATUS_PAGE_URL:-https://status.sefaria.org}
       - HEALTH_CHECK_INTERVAL=${HEALTH_CHECK_INTERVAL:-60}
-    # Wait until web is healthy — that means migrations have been applied and
-    # the schema is ready — before the scheduler touches the database.
+    # The scheduler only needs the database (it does its own checks); it does
+    # not depend on the web server being able to serve. Gate on db health and
+    # merely order after web (the migrator) has started — do NOT gate on web's
+    # healthcheck, so a web health blip can never fail the scheduler's start.
     depends_on:
       db:
         condition: service_healthy
       web:
-        condition: service_healthy
+        condition: service_started
     # This container is not an HTTP server, so the image's HTTP healthcheck
     # (inherited from the Dockerfile) would always report unhealthy. Disable it.
     healthcheck:

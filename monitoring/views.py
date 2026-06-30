@@ -559,6 +559,17 @@ def status_api(request):
     })
 
 
+def healthz(request):
+    """
+    Lightweight liveness probe for the container HEALTHCHECK.
+
+    Returns 200 without touching the database or rendering the page, so the web
+    container comes up fast on deploy and a transient DB blip doesn't mark the
+    process unhealthy. (Service health is tracked separately by the scheduler.)
+    """
+    return HttpResponse("ok", content_type="text/plain")
+
+
 @cache_page(60 * 60)
 def robots_txt(request):
     """Serve robots.txt file."""

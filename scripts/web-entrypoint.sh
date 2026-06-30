@@ -4,17 +4,21 @@
 # Runs the steps that must happen on every deploy so the running app is
 # always consistent with the code being deployed, then hands off to gunicorn.
 # This is the single migrator: the scheduler and cleanup containers do NOT
-# migrate (they wait for the web service to become healthy first), so schema
-# changes are applied exactly once.
+# migrate, so schema changes are applied exactly once.
 #
 # Each step is idempotent and safe to re-run.
 set -eu
 
+# Migrations are fatal: do not serve against a schema that doesn't match the
+# code being deployed.
 echo "[release] Applying database migrations..."
 python manage.py migrate --noinput
 
+# Static files are already collected at image build; re-running keeps them in
+# sync but must never block the server from coming up (it would make the
+# container fail its healthcheck and fail the whole deploy). Non-fatal.
 echo "[release] Collecting static files..."
-python manage.py collectstatic --noinput
+python manage.py collectstatic --noinput || echo "[release] collectstatic failed; continuing"
 
 # Surface production misconfiguration (insecure settings, missing SECRET_KEY,
 # etc.) in the deploy logs. Informational only: warnings must not block a

@@ -10,6 +10,7 @@ app_name = "monitoring"
 
 urlpatterns = [
     path("", views.status_page, name="status"),
+    path("healthz", views.healthz, name="healthz"),
     path("api/status/", views.status_api, name="status_api"),
     path("history.rss", IncidentFeed(), name="incident_feed_rss"),
     path("history.atom", AtomIncidentFeed(), name="incident_feed_atom"),

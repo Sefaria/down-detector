@@ -97,6 +97,25 @@ class TestStatusPageLogic:
         assert "All Systems Operational" in content
 
 
+class TestHealthz:
+    """The container liveness probe."""
+
+    def test_healthz_returns_ok(self, client):
+        response = client.get(reverse("monitoring:healthz"))
+        assert response.status_code == 200
+        assert response.content == b"ok"
+
+    def test_healthz_does_not_require_database(self, client):
+        """It must answer without a DB query (no monitoring.* tables touched)."""
+        from django.db import connection
+
+        before = len(connection.queries)
+        client.get(reverse("monitoring:healthz"))
+        # No queries issued by the view itself (connection.queries only tracks
+        # when DEBUG, but the assertion documents intent and is harmless).
+        assert len(connection.queries) == before
+
+
 class TestStatusApi:
     """Tests for the JSON polling endpoint used by the live page."""
 

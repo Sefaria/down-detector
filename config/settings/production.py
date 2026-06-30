@@ -9,6 +9,14 @@ DEBUG = False
 
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["status.sefaria.org"])  # noqa: F405
 
+# Always permit loopback so the container HEALTHCHECK (curl http://localhost
+# :8000/healthz) passes Django host validation no matter how the operator set
+# ALLOWED_HOSTS. Without this, a localhost probe returns 400 DisallowedHost and
+# the web container is marked unhealthy, which fails the whole deploy.
+for _loopback in ("localhost", "127.0.0.1"):
+    if _loopback not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(_loopback)
+
 # PostgreSQL via DATABASE_URL
 DATABASES = {
     "default": dj_database_url.config(
