@@ -140,6 +140,7 @@ Key modules:
 | **`HealthCheck`** | One row per service per check cycle | The raw time-series. Pruned after `HEALTH_CHECK_RETENTION_DAYS`. |
 | **`Outage`** | One row per confirmed downtime period | `start_time` = first failure in the streak; closed on recovery. Drives accurate Slack downtime. Viewable in the admin and can be **force-resolved** if stuck (see [runbook](#operations--runbook)). |
 | **`Message`** | An operator-authored incident note shown on the status page | Severity `high` / `medium` / `resolved`; managed in Django admin. |
+| **`Maintenance`** | An operator-scheduled maintenance window | Title, description, affected services (blank = all), start/end, active. While in progress, covered services show "Under Maintenance" and their Slack alerts are suppressed. Managed in Django admin. |
 
 ## Quick start (local development)
 
@@ -307,20 +308,24 @@ config/
   settings/          base · development · production · test
   urls.py            admin/ + monitoring routes
 monitoring/
-  models.py          HealthCheck · Outage · Message
-  views.py           status page, quotes, robots.txt, sitemap.xml
-  admin.py           HealthCheck + Outage (read-only) · Message (CRUD)
+  models.py          HealthCheck · Outage · Message · Maintenance
+  views.py           status page, JSON API, healthz, uptime history,
+                     sparklines, degraded logic, quotes, robots/sitemap
+  feeds.py           RSS + Atom incident feeds
+  admin.py           HealthCheck + Outage (read-only) · Message · Maintenance (CRUD)
   services/
     checker.py       HTTP checks, retries, parallelism, async two-phase
     state.py         StateTracker — transitions, Outage lifecycle
     alerter.py       Slack Block Kit alerts
-    scheduler.py     APScheduler jobs (checks + cleanup)
+    scheduler.py     APScheduler jobs (checks + cleanup, maintenance suppression)
   management/commands/
     run_checks.py        scheduler entrypoint
     cleanup_old_checks.py
   templates/ static/ migrations/
-tests/               83 tests + factories + fixtures
-Dockerfile  docker-compose.yml  requirements.txt  .env.example
+scripts/
+  web-entrypoint.sh  release flow for the web container (migrate, collectstatic, gunicorn)
+tests/               130 tests + factories + fixtures
+Dockerfile  docker-compose.yml  requirements.txt  .env.example  .gitattributes
 ```
 
 ## Operations & runbook
