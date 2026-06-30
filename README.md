@@ -4,7 +4,7 @@ Real-time uptime monitoring and a public status page for Sefaria's critical serv
 
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://python.org)
 [![Django 5.2](https://img.shields.io/badge/django-5.2-green.svg)](https://djangoproject.com)
-[![Tests](https://img.shields.io/badge/tests-149%20passing-brightgreen.svg)](#testing)
+[![Tests](https://img.shields.io/badge/tests-152%20passing-brightgreen.svg)](#testing)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 A small, self-contained Django application that checks Sefaria's services on a fixed interval, records every result, confirms outages before alerting (to filter out brief blips), posts rich [Slack](https://slack.com) notifications when a service goes down or recovers, and renders a public, SEO-optimized status page.
@@ -320,9 +320,21 @@ docker compose logs -f scheduler
 
 `docker-compose.override.yml` (git-ignored) adds local port mapping and a source mount; in production Coolify routes traffic to the `web` service, so no published ports are needed.
 
+### Edge caching (CDN)
+
+A status page is hit hardest during an outage — exactly when the origin is most fragile — so it should be cacheable at the edge. The app emits CDN-friendly headers:
+
+| Path | `Cache-Control` |
+|---|---|
+| `/` | `public, max-age=15, s-maxage=30, stale-while-revalidate=60` |
+| `/api/status/` (the JSON the page polls every 20s) | `public, max-age=10, s-maxage=10, stale-while-revalidate=30` |
+| `/healthz`, `/admin/` | `no-store` (never cached) |
+
+These responses carry no `Set-Cookie`/`Vary: Cookie`, so a shared cache can serve one copy to everyone. Coolify's Traefik does **not** cache HTML/JSON by default, so to actually get edge caching put **Cloudflare** in front (proxied DNS) and add a Cache Rule for `/` and `/api/status/` set to *Eligible for cache* / respect origin TTL (Edge TTL ≈ the `s-maxage`). The browser polls with `cache: no-store` (so it never shows a stale local copy), but that only affects the *browser* — requests still reach the edge and are served from its cache. Net effect: the origin and Postgres see roughly one request per cache window no matter how many thousands are watching.
+
 ## Testing
 
-149 tests cover the checker, state machine, alerter, scheduler, models, admin (incl. the dashboard, Operators group, and maintenance validation), cleanup, views, uptime history, response-time sparklines, degraded states, maintenance windows, incident feeds, and SEO.
+152 tests cover the checker, state machine, alerter, scheduler, models, admin (incl. the dashboard, Operators group, and maintenance validation), cleanup, views, uptime history, response-time sparklines, degraded states, maintenance windows, incident feeds, and SEO.
 
 ```bash
 # All tests (uses config.settings.test via pytest.ini)
@@ -359,7 +371,7 @@ monitoring/
   templates/ static/ migrations/   (incl. admin dashboard templates, Operators group migration)
 scripts/
   web-entrypoint.sh  release flow for the web container (migrate, collectstatic, gunicorn)
-tests/               149 tests + factories + fixtures
+tests/               152 tests + factories + fixtures
 Dockerfile  docker-compose.yml  requirements.txt  .env.example  .gitattributes
 ```
 

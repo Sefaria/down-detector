@@ -11,7 +11,7 @@ from django.db.models import Min, Q
 from django.http import HttpResponse, JsonResponse
 from django.templatetags.static import static
 from django.utils import timezone
-from django.views.decorators.cache import cache_page
+from django.views.decorators.cache import cache_page, cache_control, never_cache
 from django.shortcuts import render
 from django.urls import reverse
 
@@ -494,6 +494,7 @@ def get_response_time_sparklines(
     return out
 
 
+@cache_control(public=True, max_age=15, s_maxage=30, stale_while_revalidate=60)
 @cache_page(30)
 def status_page(request):
     """
@@ -559,6 +560,7 @@ def status_page(request):
     return render(request, "monitoring/status.html", context)
 
 
+@cache_control(public=True, max_age=10, s_maxage=10, stale_while_revalidate=30)
 @cache_page(10)
 def status_api(request):
     """
@@ -599,6 +601,7 @@ def status_api(request):
         })
 
 
+@never_cache
 def healthz(request):
     """
     Lightweight liveness probe for the container HEALTHCHECK.
@@ -606,6 +609,7 @@ def healthz(request):
     Returns 200 without touching the database or rendering the page, so the web
     container comes up fast on deploy and a transient DB blip doesn't mark the
     process unhealthy. (Service health is tracked separately by the scheduler.)
+    Never cached — a probe must always reach the live process.
     """
     return HttpResponse("ok", content_type="text/plain")
 
