@@ -261,7 +261,7 @@ Cleanup runs automatically inside the scheduler; the standalone command exists f
 - **Incident feeds** — RSS (`/history.rss`) and Atom (`/history.atom`) feeds of the incident history, built on Django's syndication framework and advertised for autodiscovery. See [`feeds.py`](monitoring/feeds.py).
 - **SEO** — Open Graph + Twitter cards, JSON-LD, `robots.txt`, and `sitemap.xml`, targeting the query "is Sefaria down".
 
-To post an incident: log into `/admin/`, add a `Message` (severity high/medium), and it appears immediately. Mark it resolved via the bulk admin action.
+To post an incident: log into `/admin/`, add a `Message` (severity high/medium), and it appears immediately. Mark it resolved via the bulk admin action. To schedule maintenance, add a `Maintenance Window` (title, affected services, start/end) — affected services then show "Under Maintenance" and their Slack alerts are suppressed for the duration.
 
 ## Deployment
 
@@ -272,9 +272,11 @@ Production runs in Docker, orchestrated by **[Coolify](https://coolify.io/)** (w
 | Service | Role | Command |
 |---|---|---|
 | `db` | PostgreSQL 16 | — |
-| `web` | Status page + admin | `migrate` then `gunicorn` |
+| `web` | Status page + admin | [`scripts/web-entrypoint.sh`](scripts/web-entrypoint.sh) |
 | `scheduler` | The health-check loop | `python manage.py run_checks` |
-| `cleanup` | One-shot maintenance (profile `maintenance`) | `python manage.py cleanup_old_checks` |
+| `cleanup` | One-shot retention cleanup (profile `maintenance`) | `python manage.py cleanup_old_checks` |
+
+On every deploy the **web** container runs the release entrypoint — `migrate` → `collectstatic` → `check --deploy` (informational) → `gunicorn` — so the schema and static assets are always current. The web container is the single migrator; the scheduler waits for it to become healthy before touching the database.
 
 ```bash
 cp .env.example .env          # set SECRET_KEY, DB_PASSWORD, SLACK_WEBHOOK_URL, ALLOWED_HOSTS
@@ -286,7 +288,7 @@ docker compose logs -f scheduler
 
 ## Testing
 
-83 tests cover the checker, state machine, alerter, scheduler, models, admin, cleanup, views, and SEO.
+128 tests cover the checker, state machine, alerter, scheduler, models, admin, cleanup, views, uptime history, response-time sparklines, degraded states, maintenance windows, incident feeds, and SEO.
 
 ```bash
 # All tests (uses config.settings.test via pytest.ini)
@@ -325,7 +327,9 @@ Dockerfile  docker-compose.yml  requirements.txt  .env.example
 
 - **A service is red but I think it's fine** — Check the scheduler logs (`docker compose logs scheduler`). The page only goes red after `failure_threshold` consecutive failures; confirm the health endpoint really returns the expected status.
 - **No Slack alerts** — Verify `SLACK_WEBHOOK_URL` is set in the `scheduler` service's environment; an empty value logs "skipping alert" and sends nothing.
-- **Post an incident banner** — `/admin/` → Incident Messages → add (severity `high` → "Major Outage", `medium` → "Partial Issues").
+- **Post an incident banner** — `/admin/` → Incident Messages → add (severity `high` contributes "Major Outage", `medium` contributes "Degraded Performance").
+- **Schedule maintenance** — `/admin/` → Maintenance Windows → add (set affected services and a start/end). During the window those services show "Under Maintenance" and their Slack alerts are suppressed; uncheck *active* to cancel.
+- **Tune the "degraded" threshold** — A service shows "Degraded" when its latest response time exceeds `DEGRADED_RESPONSE_MS` (global) or its per-service `degraded_threshold_ms`. This is page-only and never pages Slack.
 - **A `recovered` outage is stuck open** (e.g. a recovery alert was missed) — `/admin/` → Outages → select it → **"Force-resolve selected outages"**. The scheduler reconciles with the database on its next cycle (≤ `HEALTH_CHECK_INTERVAL`): it clears its in-memory down state, and if the service is in fact still failing it opens a fresh outage and re-alerts. You never need to restart the scheduler to fix a dangling outage.
 - **Database growing** — `HealthCheck` rows are pruned daily; adjust `HEALTH_CHECK_RETENTION_DAYS` or run `cleanup_old_checks` manually.
 - **Tune noise** — Raise a service's `failure_threshold` in `base.py` if it flaps; lower it for faster paging.
