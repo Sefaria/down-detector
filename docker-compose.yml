@@ -14,6 +14,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      # Don't count failures while Postgres is still initializing/recovering.
+      start_period: 30s
 
   # Django Web Application (Status Page)
   web:
@@ -32,11 +34,15 @@ services:
       - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL}
       - SLACK_CHANNEL=${SLACK_CHANNEL:-sefaria-down}
       - STATUS_PAGE_URL=${STATUS_PAGE_URL:-https://status.sefaria.org}
+    # Only order after the db container has started — do NOT gate on its
+    # healthcheck. Gating made `docker compose up` block on health and could
+    # fail the whole deploy; instead the entrypoint waits for the DB itself.
     depends_on:
       db:
-        condition: service_healthy
-    # Release steps (migrate, collectstatic, deploy checks) then gunicorn.
-    # The web container is the single migrator; see scripts/web-entrypoint.sh.
+        condition: service_started
+    # Release steps (wait-for-db, migrate, collectstatic, deploy checks) then
+    # gunicorn. The web container is the single migrator; see
+    # scripts/web-entrypoint.sh.
     command: sh scripts/web-entrypoint.sh
 
   # Health Check Scheduler (Background Service)
@@ -54,13 +60,13 @@ services:
       - SLACK_CHANNEL=${SLACK_CHANNEL:-sefaria-down}
       - STATUS_PAGE_URL=${STATUS_PAGE_URL:-https://status.sefaria.org}
       - HEALTH_CHECK_INTERVAL=${HEALTH_CHECK_INTERVAL:-60}
-    # The scheduler only needs the database (it does its own checks); it does
-    # not depend on the web server being able to serve. Gate on db health and
-    # merely order after web (the migrator) has started — do NOT gate on web's
-    # healthcheck, so a web health blip can never fail the scheduler's start.
+    # Order after db and web have started; do NOT gate on either healthcheck
+    # (that can make `docker compose up` block and fail the deploy). The
+    # scheduler's first check cycle runs one interval (~60s) after start, by
+    # which time the web container has migrated and the DB is ready.
     depends_on:
       db:
-        condition: service_healthy
+        condition: service_started
       web:
         condition: service_started
     # This container is not an HTTP server, so the image's HTTP healthcheck

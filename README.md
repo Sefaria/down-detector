@@ -277,7 +277,7 @@ Production runs in Docker, orchestrated by **[Coolify](https://coolify.io/)** (w
 | `scheduler` | The health-check loop | `python manage.py run_checks` |
 | `cleanup` | One-shot retention cleanup (profile `maintenance`) | `python manage.py cleanup_old_checks` |
 
-On every deploy the **web** container runs the release entrypoint — `migrate` → `collectstatic` → `check --deploy` (informational) → `gunicorn` — so the schema and static assets are always current. The web container is the single migrator; the scheduler is ordered after it but only gates on the database's health, so a web health blip can't fail the scheduler's start. The container healthcheck hits a lightweight `/healthz` (no DB, no page render), and production always allows `localhost` so that probe passes regardless of `ALLOWED_HOSTS`.
+On every deploy the **web** container runs the release entrypoint — **wait for DB** → `migrate` → `collectstatic` → `check --deploy` (informational) → `gunicorn` — so the schema and static assets are always current. The web container is the single migrator. Compose `depends_on` only *orders* containers (`service_started`), it does **not** gate `up` on healthchecks — gating made `docker compose up` block and could fail the whole deploy, so the entrypoint waits for the DB itself instead. The container healthcheck hits a lightweight `/healthz` (no DB, no page render), and production always allows `localhost` so that probe passes regardless of `ALLOWED_HOSTS`.
 
 ```bash
 cp .env.example .env          # set SECRET_KEY, DB_PASSWORD, SLACK_WEBHOOK_URL, ALLOWED_HOSTS
