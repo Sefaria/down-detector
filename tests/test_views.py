@@ -97,6 +97,58 @@ class TestStatusPageLogic:
         assert "All Systems Operational" in content
 
 
+class TestStatusApi:
+    """Tests for the JSON polling endpoint used by the live page."""
+
+    def test_api_returns_json_snapshot(self, client, settings):
+        """The endpoint returns overall status + per-service status as JSON."""
+        for cfg in settings.MONITORED_SERVICES:
+            HealthCheckFactory(service_name=cfg["name"], status="up", response_time_ms=123)
+
+        response = client.get(reverse("monitoring:status_api"))
+
+        assert response.status_code == 200
+        assert response["Content-Type"] == "application/json"
+        data = response.json()
+        assert data["overall_status"] == "operational"
+        assert data["status_label"] == "All Systems Operational"
+        names = {s["name"] for s in data["services"]}
+        assert names == {c["name"] for c in settings.MONITORED_SERVICES}
+        assert all("response_time_ms" in s and "detail" in s for s in data["services"])
+
+    def test_api_reflects_confirmed_outage(self, client, settings):
+        """A confirmed-down service is reported down by the API."""
+        cfg = settings.MONITORED_SERVICES[0]
+        threshold = cfg.get("failure_threshold", 2)
+        for _ in range(threshold):
+            HealthCheckFactory(service_name=cfg["name"], status="down", status_code=503)
+
+        data = client.get(reverse("monitoring:status_api")).json()
+
+        assert data["overall_status"] == "major"
+        svc = next(s for s in data["services"] if s["name"] == cfg["name"])
+        assert svc["status"] == "down"
+
+    def test_api_does_not_leak_raw_error(self, client, settings):
+        """The JSON 'detail' is sanitized, never the raw internal error."""
+        cfg = settings.MONITORED_SERVICES[0]
+        threshold = cfg.get("failure_threshold", 2)
+        for _ in range(threshold):
+            HealthCheckFactory(
+                service_name=cfg["name"],
+                status="down",
+                status_code=None,
+                error_message='connection to server at "10.0.3.3" failed',
+            )
+
+        svc = next(
+            s for s in client.get(reverse("monitoring:status_api")).json()["services"]
+            if s["name"] == cfg["name"]
+        )
+        assert "10.0.3.3" not in svc["detail"]
+        assert svc["detail"] == "Service unreachable"
+
+
 class TestPublicErrorSanitization:
     """The public page must never echo raw internal error detail."""
 

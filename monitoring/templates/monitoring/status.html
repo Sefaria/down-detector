@@ -92,7 +92,7 @@
             <h2>Services</h2>
             <div class="service-list">
                 {% for service in services %}
-                <div class="service-item">
+                <div class="service-item" data-service="{{ service.name }}">
                     <div class="service-info">
                         <span class="service-dot status-{{ service.status }}"></span>
                         <span class="service-name">{{ service.name }}</span>
@@ -181,43 +181,104 @@
 
     <script>
         (function () {
-            // ---- Truthful "last checked N ago" --------------------------------
+            const API_URL = "{% url 'monitoring:status_api' %}";
+            const POLL_MS = 30000;          // patch service status in place
+            const FULL_RELOAD_MS = 300000;  // full reload for incidents/quote/uptime
+
+            const lastCheckedEl = document.getElementById('last-checked');
+
+            function parseDate(s) {
+                if (!s) { return null; }
+                const d = new Date(s);
+                return isNaN(d) ? null : d;
+            }
+
             // Anchored to the real timestamp of the most recent check, not a
             // counter that resets to zero on every page load.
-            const el = document.getElementById('last-checked');
-            const checkedAt = el && el.dataset.checked ? new Date(el.dataset.checked) : null;
+            let checkedAt = parseDate(lastCheckedEl && lastCheckedEl.dataset.checked);
 
             function renderElapsed() {
-                if (!checkedAt || isNaN(checkedAt)) { return; }
+                if (!lastCheckedEl || !checkedAt) { return; }
                 const secs = Math.max(0, Math.round((Date.now() - checkedAt) / 1000));
-                if (secs < 60) {
-                    el.textContent = secs + 's ago';
-                } else {
-                    el.textContent = Math.floor(secs / 60) + 'm ago';
-                }
+                lastCheckedEl.textContent =
+                    secs < 60 ? secs + 's ago' : Math.floor(secs / 60) + 'm ago';
             }
-            renderElapsed();
-            setInterval(renderElapsed, 1000);
-
-            // Auto-refresh to pick up fresh data.
-            setTimeout(function () { window.location.reload(); }, 60000);
 
             // ---- Status-colored favicon (simple SVG dot) ----------------------
-            const dotColor = {
-                'operational': '#5AA98C',
-                'partial': '#CCB479',
-                'major': '#D1574B'
-            }["{{ overall_status }}"] || '#7C8AA0';
-
-            const svg =
-                '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">' +
-                '<circle cx="16" cy="16" r="14" fill="' + dotColor + '"/>' +
-                '</svg>';
-            const favicon = document.getElementById('favicon');
-            if (favicon) {
-                favicon.type = 'image/svg+xml';
-                favicon.href = 'data:image/svg+xml,' + encodeURIComponent(svg);
+            function setFavicon(overall) {
+                const color = {
+                    'operational': '#5AA98C',
+                    'partial': '#CCB479',
+                    'major': '#D1574B'
+                }[overall] || '#7C8AA0';
+                const svg =
+                    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">' +
+                    '<circle cx="16" cy="16" r="14" fill="' + color + '"/></svg>';
+                const f = document.getElementById('favicon');
+                if (f) {
+                    f.type = 'image/svg+xml';
+                    f.href = 'data:image/svg+xml,' + encodeURIComponent(svg);
+                }
             }
+
+            // ---- In-place updates from the JSON snapshot ----------------------
+            function serviceStatusHTML(s) {
+                if (s.status === 'up') {
+                    let h = '<span class="status-badge status-up">Operational</span>';
+                    if (s.response_time_ms) {
+                        h += '<span class="response-time">' + s.response_time_ms + 'ms</span>';
+                    }
+                    return h;
+                }
+                if (s.status === 'down') {
+                    let h = '<span class="status-badge status-down">Down</span>';
+                    if (s.detail) {
+                        h += '<span class="error-hint" title="' +
+                            String(s.detail).replace(/"/g, '&quot;') + '">ⓘ</span>';
+                    }
+                    return h;
+                }
+                return '<span class="status-badge status-unknown">Unknown</span>';
+            }
+
+            function applyData(data) {
+                const banner = document.querySelector('.overall-status');
+                if (banner) { banner.className = 'overall-status status-' + data.overall_status; }
+                const bigDot = document.querySelector('.overall-status .status-dot');
+                if (bigDot) { bigDot.classList.toggle('pulse', data.overall_status !== 'operational'); }
+                const statusText = document.querySelector('.status-text');
+                if (statusText) { statusText.textContent = data.status_label; }
+
+                (data.services || []).forEach(function (s) {
+                    const row = document.querySelector(
+                        '.service-item[data-service="' + s.name + '"]'
+                    );
+                    if (!row) { return; }
+                    const dot = row.querySelector('.service-dot');
+                    if (dot) { dot.className = 'service-dot status-' + s.status; }
+                    const st = row.querySelector('.service-status');
+                    if (st) { st.innerHTML = serviceStatusHTML(s); }
+                });
+
+                checkedAt = parseDate(data.last_checked) || checkedAt;
+                renderElapsed();
+                setFavicon(data.overall_status);
+            }
+
+            function poll() {
+                fetch(API_URL, { headers: { 'Accept': 'application/json' }, cache: 'no-store' })
+                    .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+                    .then(applyData)
+                    .catch(function () { /* transient — retry on the next tick */ });
+            }
+
+            // Init
+            renderElapsed();
+            setFavicon("{{ overall_status }}");
+            setInterval(renderElapsed, 1000);
+            setInterval(poll, POLL_MS);
+            // A slow full reload still picks up incidents, the quote, and uptime.
+            setTimeout(function () { window.location.reload(); }, FULL_RELOAD_MS);
         })();
     </script>
 </body>

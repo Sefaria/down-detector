@@ -5,7 +5,7 @@ import random
 
 from django.conf import settings
 from django.db.models import Max
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.views.decorators.cache import cache_page
 from django.shortcuts import render
 from django.urls import reverse
@@ -241,6 +241,12 @@ def get_status_label(overall_status: str) -> str:
     }.get(overall_status, "Unknown")
 
 
+def _latest_check_iso(service_statuses: list[dict]) -> str:
+    """ISO-8601 timestamp of the most recent check across all services."""
+    check_times = [s["last_checked"] for s in service_statuses if s["last_checked"]]
+    return max(check_times).isoformat() if check_times else ""
+
+
 @cache_page(30)
 def status_page(request):
     """
@@ -267,8 +273,7 @@ def status_page(request):
     # Most recent check across all services, as an ISO-8601 string, so the
     # page can show a truthful "last checked Ns ago" relative to real time
     # (instead of a client-side counter that always starts at zero on load).
-    check_times = [s["last_checked"] for s in service_statuses if s["last_checked"]]
-    last_checked_iso = max(check_times).isoformat() if check_times else ""
+    last_checked_iso = _latest_check_iso(service_statuses)
 
     context = {
         "services": service_statuses,
@@ -281,6 +286,38 @@ def status_page(request):
     }
     
     return render(request, "monitoring/status.html", context)
+
+
+@cache_page(15)
+def status_api(request):
+    """
+    Lightweight JSON snapshot of service health for live polling.
+
+    The status page polls this every ~30s and updates the DOM in place,
+    instead of reloading the whole page. It returns only the fast-changing
+    bits (per-service status + overall banner + last-checked); slow-changing
+    content (incidents, quote, uptime history) is refreshed by a much less
+    frequent full reload. Mirrors the same confirmation logic as the page so
+    the two never disagree.
+    """
+    service_statuses = get_service_statuses()
+    active_incidents = list(Message.objects.filter(active=True))
+    overall_status = get_overall_status(service_statuses, active_incidents)
+
+    return JsonResponse({
+        "overall_status": overall_status,
+        "status_label": get_status_label(overall_status),
+        "last_checked": _latest_check_iso(service_statuses),
+        "services": [
+            {
+                "name": s["name"],
+                "status": s["status"],
+                "response_time_ms": s["response_time_ms"],
+                "detail": s["detail"],
+            }
+            for s in service_statuses
+        ],
+    })
 
 
 @cache_page(60 * 60)
