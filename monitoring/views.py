@@ -527,7 +527,7 @@ def status_page(request):
     return render(request, "monitoring/status.html", context)
 
 
-@cache_page(15)
+@cache_page(10)
 def status_api(request):
     """
     Lightweight JSON snapshot of service health for live polling.

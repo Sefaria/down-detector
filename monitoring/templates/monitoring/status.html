@@ -272,7 +272,7 @@
     <script>
         (function () {
             const API_URL = "{% url 'monitoring:status_api' %}";
-            const POLL_MS = 30000;          // patch service status in place
+            const POLL_MS = 20000;          // patch service status in place
             const FULL_RELOAD_MS = 300000;  // full reload for incidents/quote/uptime
 
             const lastCheckedEl = document.getElementById('last-checked');
@@ -372,6 +372,11 @@
             renderElapsed();
             setFavicon("{{ overall_status }}");
             setInterval(renderElapsed, 1000);
+            // Poll once immediately so "last checked" syncs to the real server
+            // time right away (the page HTML may have been cached), then keep
+            // polling. Each successful poll re-anchors the counter, so it never
+            // climbs indefinitely.
+            poll();
             setInterval(poll, POLL_MS);
             // A slow full reload still picks up incidents, the quote, and uptime.
             setTimeout(function () { window.location.reload(); }, FULL_RELOAD_MS);

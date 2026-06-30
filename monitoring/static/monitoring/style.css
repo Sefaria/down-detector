@@ -88,11 +88,11 @@ body {
     -webkit-font-smoothing: antialiased;
 }
 
-/* Signature Sefaria touch: a thin category-color accent line at the top. */
+/* Signature Sefaria touch: a category-color accent band at the top. */
 body::before {
     content: "";
     display: block;
-    height: 4px;
+    height: 8px;
     background: var(--category-rainbow);
 }
 
