@@ -3,8 +3,10 @@ Django Admin configuration for monitoring models.
 """
 import logging
 
+from django.conf import settings
 from django.contrib import admin
 from django.utils import timezone
+from django.utils.html import format_html
 
 from .models import HealthCheck, Outage, Message, Maintenance
 
@@ -25,9 +27,10 @@ class HealthCheckAdmin(admin.ModelAdmin):
 
     list_display = [
         "service_name",
-        "status",
+        "status_badge",
         "response_time_ms",
         "status_code",
+        "error_preview",
         "checked_at",
     ]
     list_filter = ["service_name", "status"]
@@ -35,6 +38,18 @@ class HealthCheckAdmin(admin.ModelAdmin):
     date_hierarchy = "checked_at"
     ordering = ["-checked_at"]
     list_per_page = 50
+
+    @admin.display(description="Status", ordering="status")
+    def status_badge(self, obj):
+        color = {"up": "#2F7A52", "down": "#9B3144"}.get(obj.status, "#666664")
+        return format_html(
+            '<b style="color:{}">{}</b>', color, obj.status.upper()
+        )
+
+    @admin.display(description="Error")
+    def error_preview(self, obj):
+        msg = obj.error_message or ""
+        return (msg[:60] + "…") if len(msg) > 60 else msg
 
     # Health checks are system-generated, not manually edited
     def has_add_permission(self, request):
@@ -180,6 +195,7 @@ class MaintenanceAdmin(admin.ModelAdmin):
     date_hierarchy = "start_time"
     ordering = ["-start_time"]
     list_editable = ["active"]
+    readonly_fields = ["available_services"]
 
     fieldsets = (
         (None, {
@@ -187,8 +203,12 @@ class MaintenanceAdmin(admin.ModelAdmin):
             "description": "Shown on the public status page while the window is current or upcoming.",
         }),
         ("Scope", {
-            "fields": ("affected_services",),
-            "description": "Which services this covers. Leave blank to cover every monitored service.",
+            "fields": ("affected_services", "available_services"),
+            "description": (
+                "Which services this covers — comma-separated, matching the names "
+                "below exactly. Leave blank to cover every monitored service. "
+                "Unknown names are rejected on save."
+            ),
         }),
         ("Schedule", {
             "fields": ("start_time", "end_time", "active"),
@@ -201,28 +221,47 @@ class MaintenanceAdmin(admin.ModelAdmin):
         }),
     )
 
+    @admin.display(description="Available service names")
+    def available_services(self, obj=None):
+        """List the exact, valid service names operators can put in scope."""
+        names = [s["name"] for s in getattr(settings, "MONITORED_SERVICES", [])]
+        return ", ".join(names) or "(none configured)"
+
     @admin.display(description="State")
     def state(self, obj):
-        """In progress / Scheduled / Past, at a glance."""
+        """In progress / Scheduled / Past, at a glance (color-coded)."""
         if not obj.active:
-            return "Cancelled"
-        if obj.is_in_progress():
-            return "In progress"
-        if obj.is_upcoming():
-            return "Scheduled"
-        return "Past"
+            label, color = "Cancelled", "#666664"
+        elif obj.is_in_progress():
+            label, color = "In progress", "#2D5483"
+        elif obj.is_upcoming():
+            label, color = "Scheduled", "#876716"
+        else:
+            label, color = "Past", "#666664"
+        return format_html('<b style="color:{}">{}</b>', color, label)
 
 
 @admin.register(Message)
 class MessageAdmin(admin.ModelAdmin):
     """Admin for incident messages."""
 
-    list_display = ["severity", "text_preview", "active", "created_at", "updated_at"]
+    list_display = ["severity_badge", "text_preview", "active", "created_at", "updated_at"]
     list_filter = ["severity", "active"]
     list_editable = ["active"]
     search_fields = ["text"]
     ordering = ["-created_at"]
     actions = ["mark_as_resolved"]
+
+    @admin.display(description="Severity", ordering="severity")
+    def severity_badge(self, obj):
+        color = {
+            "high": "#9B3144",
+            "medium": "#876716",
+            "resolved": "#2F7A52",
+        }.get(obj.severity, "#666664")
+        return format_html(
+            '<b style="color:{}">{}</b>', color, obj.get_severity_display()
+        )
 
     fieldsets = (
         (None, {

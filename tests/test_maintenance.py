@@ -56,6 +56,58 @@ class TestMaintenanceModel:
         assert set(titles) == {"now", "future"}
 
 
+class TestMaintenanceValidation:
+    """Model-level validation guards operator footguns (enforced in admin)."""
+
+    def test_end_before_start_is_rejected(self):
+        from django.core.exceptions import ValidationError
+
+        now = timezone.now()
+        m = Maintenance(
+            title="bad window",
+            start_time=now + timedelta(hours=2),
+            end_time=now + timedelta(hours=1),
+        )
+        with pytest.raises(ValidationError) as exc:
+            m.full_clean()
+        assert "end_time" in exc.value.message_dict
+
+    def test_unknown_service_name_is_rejected_with_valid_list(self, settings):
+        from django.core.exceptions import ValidationError
+
+        now = timezone.now()
+        m = Maintenance(
+            title="typo",
+            affected_services="not-a-real-service",
+            start_time=now,
+            end_time=now + timedelta(hours=1),
+        )
+        with pytest.raises(ValidationError) as exc:
+            m.full_clean()
+        msg = exc.value.message_dict["affected_services"][0]
+        # The error names the valid services so the operator can fix the typo.
+        assert settings.MONITORED_SERVICES[0]["name"] in msg
+
+    def test_known_service_name_passes(self, settings):
+        now = timezone.now()
+        m = Maintenance(
+            title="ok",
+            affected_services=settings.MONITORED_SERVICES[0]["name"],
+            start_time=now,
+            end_time=now + timedelta(hours=1),
+        )
+        m.full_clean()  # should not raise
+
+    def test_blank_scope_passes(self):
+        now = timezone.now()
+        Maintenance(
+            title="all services",
+            affected_services="",
+            start_time=now,
+            end_time=now + timedelta(hours=1),
+        ).full_clean()  # should not raise
+
+
 class TestMaintenanceOnStatusPage:
     def test_service_shows_under_maintenance(self, client, settings):
         name = settings.MONITORED_SERVICES[0]["name"]

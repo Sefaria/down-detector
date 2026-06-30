@@ -2,6 +2,7 @@
 Models for the Sefaria status monitoring system.
 """
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
 
@@ -124,6 +125,30 @@ class Maintenance(models.Model):
 
     def __str__(self):
         return f"{self.title} ({self.start_time:%Y-%m-%d %H:%M} UTC)"
+
+    def clean(self):
+        """Validate operator input (enforced by the admin form).
+
+        Guards two silent footguns: a backwards time window, and an
+        ``affected_services`` typo that would make the window match no
+        service. Unknown names are rejected with the list of valid ones.
+        """
+        super().clean()
+        if self.start_time and self.end_time and self.end_time <= self.start_time:
+            raise ValidationError(
+                {"end_time": "End time must be after the start time."}
+            )
+        known = {s["name"] for s in getattr(settings, "MONITORED_SERVICES", [])}
+        unknown = [name for name in self.affected_list if name not in known]
+        if unknown:
+            raise ValidationError({
+                "affected_services": (
+                    "Unknown service name(s): "
+                    f"{', '.join(unknown)}. "
+                    f"Valid names are: {', '.join(sorted(known))}. "
+                    "Leave blank to cover all services."
+                )
+            })
 
     @property
     def affected_list(self) -> list[str]:
