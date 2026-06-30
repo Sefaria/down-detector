@@ -115,6 +115,32 @@ def get_random_quote(overall_status: str) -> dict:
     return random.choice(quotes)
 
 
+def get_public_status_detail(error_message: str, status_code: int | None) -> str:
+    """
+    Turn a raw internal check error into a safe, user-facing hint.
+
+    The raw ``error_message`` is operator-facing and can contain internal
+    infrastructure details (private hostnames/IPs, library stack fragments,
+    e.g. ``connection to server at "10.0.3.3", port 5432 failed``). The
+    *public* status page must never echo those. We map the error to a short,
+    generic phrase and surface only the non-sensitive HTTP status code when
+    one is present. The full raw error remains available to authenticated
+    operators in the Django admin (``HealthCheck``).
+    """
+    if not error_message:
+        return ""
+
+    msg = error_message.lower()
+    if "timed out" in msg or "timeout" in msg:
+        return "Request timed out"
+    if "connection" in msg or "unreachable" in msg:
+        return "Service unreachable"
+    if status_code:
+        # Covers "Expected 200, got 521" etc. The code itself is not sensitive.
+        return f"Unexpected response (HTTP {status_code})"
+    return "Not responding correctly"
+
+
 def get_service_statuses() -> list[dict]:
     """
     Get the confirmed status for each monitored service.
@@ -150,7 +176,7 @@ def get_service_statuses() -> list[dict]:
                 "response_time_ms": None,
                 "last_checked": None,
                 "status_code": None,
-                "error_message": "",
+                "detail": "",
             })
             continue
 
@@ -169,7 +195,14 @@ def get_service_statuses() -> list[dict]:
             "response_time_ms": latest_check.response_time_ms,
             "last_checked": latest_check.checked_at,
             "status_code": latest_check.status_code,
-            "error_message": latest_check.error_message if all_down else "",
+            # Public, sanitized hint only — never the raw internal error.
+            "detail": (
+                get_public_status_detail(
+                    latest_check.error_message, latest_check.status_code
+                )
+                if all_down
+                else ""
+            ),
         })
 
     return statuses

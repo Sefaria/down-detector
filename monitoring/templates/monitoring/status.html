@@ -105,8 +105,8 @@
                         {% endif %}
                         {% elif service.status == 'down' %}
                         <span class="status-badge status-down">Down</span>
-                        {% if service.error_message %}
-                        <span class="error-hint" title="{{ service.error_message }}">ⓘ</span>
+                        {% if service.detail %}
+                        <span class="error-hint" title="{{ service.detail }}">ⓘ</span>
                         {% endif %}
                         {% else %}
                         <span class="status-badge status-unknown">Unknown</span>

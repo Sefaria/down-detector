@@ -95,3 +95,60 @@ class TestStatusPageLogic:
         content = response.content.decode()
 
         assert "All Systems Operational" in content
+
+
+class TestPublicErrorSanitization:
+    """The public page must never echo raw internal error detail."""
+
+    def test_internal_host_is_not_leaked(self, client, settings):
+        """A down service's raw error (with an internal IP) is sanitized."""
+        service_name = settings.MONITORED_SERVICES[0]["name"]
+        threshold = settings.MONITORED_SERVICES[0].get("failure_threshold", 2)
+
+        raw = 'connection to server at "10.0.3.3", port 5432 failed: FATAL: sorry'
+        for _ in range(threshold):
+            HealthCheckFactory(
+                service_name=service_name,
+                status="down",
+                status_code=None,
+                error_message=raw,
+            )
+
+        content = client.get(reverse("monitoring:status")).content.decode()
+
+        assert "10.0.3.3" not in content
+        assert "5432" not in content
+        assert "Service unreachable" in content
+
+    def test_status_code_is_surfaced_but_not_raw_text(self, client, settings):
+        """An HTTP-code failure shows the code, not the raw 'Expected ...' text."""
+        service_name = settings.MONITORED_SERVICES[0]["name"]
+        threshold = settings.MONITORED_SERVICES[0].get("failure_threshold", 2)
+
+        for _ in range(threshold):
+            HealthCheckFactory(
+                service_name=service_name,
+                status="down",
+                status_code=521,
+                error_message="Expected 200, got 521",
+            )
+
+        content = client.get(reverse("monitoring:status")).content.decode()
+
+        assert "Unexpected response (HTTP 521)" in content
+        assert "Expected 200, got 521" not in content
+
+    def test_detail_helper_classifies_errors(self):
+        """Unit-level checks for the sanitizer's mapping."""
+        from monitoring.views import get_public_status_detail
+
+        assert get_public_status_detail("", None) == ""
+        assert get_public_status_detail("Request timed out: x", None) == "Request timed out"
+        assert (
+            get_public_status_detail('connection to server at "10.0.3.3"', None)
+            == "Service unreachable"
+        )
+        assert (
+            get_public_status_detail("Expected 200, got 503", 503)
+            == "Unexpected response (HTTP 503)"
+        )
