@@ -370,14 +370,93 @@ def get_uptime_history(days: int = 90) -> list[dict]:
     return history
 
 
+def get_response_time_sparklines(
+    points: int = 40,
+    hours: int = 24,
+    width: float = 120.0,
+    height: float = 28.0,
+    pad: float = 3.0,
+) -> dict:
+    """
+    Build a small inline-SVG response-time sparkline for each service.
+
+    Returns ``{service_name: spark_dict | None}`` where ``spark_dict`` has the
+    SVG geometry (a ``points`` string for the line and an ``area`` path for the
+    fill) plus ``min``/``max``/``latest`` (ms) for the tooltip. The newest
+    ``points`` samples within the last ``hours`` are used; a higher response
+    time draws higher on the y-axis, so latency spikes read as upward peaks.
+    Pure geometry computed here — the template just drops it into an <svg>, so
+    there's no charting library or client-side work.
+    """
+    services = getattr(settings, "MONITORED_SERVICES", [])
+    since = timezone.now() - timedelta(hours=hours)
+    out: dict = {}
+
+    for cfg in services:
+        name = cfg["name"]
+        values = list(
+            HealthCheck.objects
+            .filter(
+                service_name=name,
+                checked_at__gte=since,
+                response_time_ms__isnull=False,
+            )
+            .order_by("-checked_at")
+            .values_list("response_time_ms", flat=True)[:points]
+        )
+
+        if len(values) < 2:
+            out[name] = None
+            continue
+
+        values.reverse()  # oldest -> newest, left to right
+        vmin, vmax = min(values), max(values)
+        span = (vmax - vmin) or 1
+        n = len(values)
+        usable_w = width - 2 * pad
+        usable_h = height - 2 * pad
+        baseline = height - pad
+
+        coords = []
+        for i, v in enumerate(values):
+            x = pad + usable_w * i / (n - 1)
+            norm = (v - vmin) / span  # 0..1, higher ms -> higher
+            y = pad + usable_h * (1 - norm)
+            coords.append((round(x, 1), round(y, 1)))
+
+        line = " ".join(f"{x},{y}" for x, y in coords)
+        area = (
+            f"M {coords[0][0]},{baseline} "
+            + " ".join(f"L {x},{y}" for x, y in coords)
+            + f" L {coords[-1][0]},{baseline} Z"
+        )
+
+        out[name] = {
+            "points": line,
+            "area": area,
+            "min": vmin,
+            "max": vmax,
+            "latest": values[-1],
+            "count": n,
+            "window": f"{hours}h",
+            "width": width,
+            "height": height,
+        }
+
+    return out
+
+
 @cache_page(30)
 def status_page(request):
     """
     Public status page showing service health and incidents.
     """
-    # Get service statuses
+    # Get service statuses, and attach a response-time sparkline to each.
     service_statuses = get_service_statuses()
-    
+    sparklines = get_response_time_sparklines()
+    for s in service_statuses:
+        s["sparkline"] = sparklines.get(s["name"])
+
     # Get active incidents
     active_incidents = list(Message.objects.filter(active=True).order_by("-created_at"))
     

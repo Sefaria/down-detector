@@ -103,6 +103,17 @@
                         <span class="service-dot status-{{ service.status }}"></span>
                         <span class="service-name">{{ service.name }}</span>
                     </div>
+                    {% if service.sparkline %}
+                    <span class="service-spark"
+                        title="Response time over the last {{ service.sparkline.window }}: min {{ service.sparkline.min }}ms, max {{ service.sparkline.max }}ms, latest {{ service.sparkline.latest }}ms"
+                        aria-label="Response time trend: latest {{ service.sparkline.latest }} milliseconds">
+                        <svg viewBox="0 0 {{ service.sparkline.width }} {{ service.sparkline.height }}"
+                            preserveAspectRatio="none" role="img" focusable="false">
+                            <path class="spark-area" d="{{ service.sparkline.area }}" />
+                            <polyline class="spark-line" points="{{ service.sparkline.points }}" />
+                        </svg>
+                    </span>
+                    {% endif %}
                     <div class="service-status">
                         {% if service.status == 'up' %}
                         <span class="status-badge status-up">Operational</span>
