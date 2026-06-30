@@ -1,0 +1,17 @@
+# This project is deployed to Linux containers. Normalize line endings so a
+# CRLF checkout on Windows can never ship a broken shell script or template.
+* text=auto eol=lf
+
+# Scripts must be LF — a CRLF shebang line fails in the container
+# (`/bin/sh^M: bad interpreter`).
+*.sh text eol=lf
+
+# Binary assets: never touch.
+*.png binary
+*.ico binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.svg text eol=lf
+*.woff binary
+*.woff2 binary
