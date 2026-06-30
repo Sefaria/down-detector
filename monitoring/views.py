@@ -231,6 +231,12 @@ def status_page(request):
     status_label = get_status_label(overall_status)
     quote = get_random_quote(overall_status)
 
+    # Most recent check across all services, as an ISO-8601 string, so the
+    # page can show a truthful "last checked Ns ago" relative to real time
+    # (instead of a client-side counter that always starts at zero on load).
+    check_times = [s["last_checked"] for s in service_statuses if s["last_checked"]]
+    last_checked_iso = max(check_times).isoformat() if check_times else ""
+
     context = {
         "services": service_statuses,
         "active_incidents": active_incidents,
@@ -238,6 +244,7 @@ def status_page(request):
         "overall_status": overall_status,
         "status_label": status_label,
         "quote": quote,
+        "last_checked_iso": last_checked_iso,
     }
     
     return render(request, "monitoring/status.html", context)

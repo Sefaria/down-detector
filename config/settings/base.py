@@ -127,7 +127,11 @@ MONITORED_SERVICES = [
         "method": "GET",
         "expected_status": 200,
         "timeout": 20,
-        "failure_threshold": 2,
+        # Higher threshold: this origin is briefly restarted on a daily
+        # schedule (~07:2x UTC) and returns Cloudflare 521 for a few minutes.
+        # Requiring 4 consecutive failed cycles absorbs that routine restart
+        # while still catching a genuine sustained (>~4 min) outage.
+        "failure_threshold": 4,
     },
     {
         "name": "AI Chatbot",
@@ -135,7 +139,8 @@ MONITORED_SERVICES = [
         "method": "GET",
         "expected_status": 200,
         "timeout": 20,
-        "failure_threshold": 2,
+        # Same daily ~07:2x UTC origin restart as MCP Server — see above.
+        "failure_threshold": 4,
     },
     {
         "name": "Linker",

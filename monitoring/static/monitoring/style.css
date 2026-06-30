@@ -6,20 +6,23 @@
     --sefaria-gold: #CCB479;
     --sefaria-light-blue: #2D4A7C;
 
-    /* Status colors */
-    --status-up: #10B981;
-    --status-down: #EF4444;
-    --status-partial: #F59E0B;
-    --status-unknown: #6B7280;
-    --status-resolved: #6B7280;
+    /* Status colors — bespoke tones anchored on the Sefaria palette, not
+       the generic framework defaults. Gold doubles as the "partial" hue. */
+    --status-up: #5AA98C;
+    --status-down: #D1574B;
+    --status-partial: var(--sefaria-gold);
+    --status-unknown: #7C8AA0;
+    --status-resolved: #7C8AA0;
 
-    /* UI colors */
-    --bg-primary: #0f172a;
-    --bg-secondary: #1e293b;
-    --bg-card: #334155;
-    --text-primary: #f1f5f9;
-    --text-secondary: #94a3b8;
-    --border-color: #475569;
+    /* UI colors — a dark theme derived from the brand navy (#18345D)
+       rather than a neutral slate, with a warm off-white for text so it
+       sits well against the gold accents. */
+    --bg-primary: #0c1c33;
+    --bg-secondary: #122742;
+    --bg-card: #1b3354;
+    --text-primary: #F2EFE8;
+    --text-secondary: #9DAFC6;
+    --border-color: #2a4366;
 
     /* Typography */
     --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
@@ -32,14 +35,14 @@
 }
 
 html {
-    background-color: #0f172a;
+    background-color: #0c1c33;
     /* var(--bg-primary) fallback */
     background-color: var(--bg-primary);
 }
 
 body {
     font-family: var(--font-family);
-    background: linear-gradient(135deg, var(--bg-primary) 0%, #1a2744 100%) fixed;
+    background: linear-gradient(135deg, var(--bg-primary) 0%, #15315a 100%) fixed;
     color: var(--text-primary);
     line-height: 1.6;
     min-height: 100vh;
@@ -115,18 +118,18 @@ header .subtitle {
 }
 
 .overall-status.status-operational {
-    background: linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(16, 185, 129, 0.04));
-    border: 1px solid rgba(16, 185, 129, 0.25);
+    background: linear-gradient(135deg, rgba(90, 169, 140, 0.12), rgba(90, 169, 140, 0.04));
+    border: 1px solid rgba(90, 169, 140, 0.25);
 }
 
 .overall-status.status-partial {
-    background: linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(245, 158, 11, 0.04));
-    border: 1px solid rgba(245, 158, 11, 0.25);
+    background: linear-gradient(135deg, rgba(204, 180, 121, 0.12), rgba(204, 180, 121, 0.04));
+    border: 1px solid rgba(204, 180, 121, 0.25);
 }
 
 .overall-status.status-major {
-    background: linear-gradient(135deg, rgba(239, 68, 68, 0.12), rgba(239, 68, 68, 0.04));
-    border: 1px solid rgba(239, 68, 68, 0.25);
+    background: linear-gradient(135deg, rgba(209, 87, 75, 0.12), rgba(209, 87, 75, 0.04));
+    border: 1px solid rgba(209, 87, 75, 0.25);
 }
 
 .status-indicator {
@@ -161,11 +164,11 @@ header .subtitle {
 
     0%,
     100% {
-        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5);
+        box-shadow: 0 0 0 0 rgba(209, 87, 75, 0.5);
     }
 
     50% {
-        box-shadow: 0 0 0 8px rgba(239, 68, 68, 0);
+        box-shadow: 0 0 0 8px rgba(209, 87, 75, 0);
     }
 }
 
@@ -300,11 +303,11 @@ header .subtitle {
 
     0%,
     100% {
-        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+        box-shadow: 0 0 0 0 rgba(209, 87, 75, 0.4);
     }
 
     50% {
-        box-shadow: 0 0 0 6px rgba(239, 68, 68, 0);
+        box-shadow: 0 0 0 6px rgba(209, 87, 75, 0);
     }
 }
 
@@ -329,17 +332,17 @@ header .subtitle {
 }
 
 .status-badge.status-up {
-    background: rgba(16, 185, 129, 0.12);
+    background: rgba(90, 169, 140, 0.12);
     color: var(--status-up);
 }
 
 .status-badge.status-down {
-    background: rgba(239, 68, 68, 0.12);
+    background: rgba(209, 87, 75, 0.12);
     color: var(--status-down);
 }
 
 .status-badge.status-unknown {
-    background: rgba(107, 114, 128, 0.12);
+    background: rgba(124, 138, 160, 0.12);
     color: var(--status-unknown);
 }
 
@@ -394,18 +397,18 @@ header .subtitle {
 }
 
 .severity-high .severity-badge {
-    background: rgba(239, 68, 68, 0.12);
+    background: rgba(209, 87, 75, 0.12);
     color: var(--status-down);
 }
 
 .severity-medium .severity-badge {
-    background: rgba(245, 158, 11, 0.12);
+    background: rgba(204, 180, 121, 0.12);
     color: var(--status-partial);
 }
 
 .severity-resolved .severity-badge,
 .severity-badge.resolved {
-    background: rgba(107, 114, 128, 0.12);
+    background: rgba(124, 138, 160, 0.12);
     color: var(--status-resolved);
 }
 

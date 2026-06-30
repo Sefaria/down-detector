@@ -46,20 +46,30 @@ Services are declared in [`config/settings/base.py`](config/settings/base.py) (`
 | Service | Check | Method | Expects | Failure threshold | Env override |
 |---|---|---|---|---|---|
 | **sefaria.org** | `…/healthz` | GET | `200` | 2 cycles | `SEFARIA_HEALTH_URL` |
-| **MCP Server** | `mcp.sefaria.org/healthz` | GET | `200` | 2 cycles | `MCP_HEALTH_URL` |
-| **AI Chatbot** | `chat.sefaria.org/api/health` | GET | `200` | 2 cycles | `AI_CHATBOT_HEALTH_URL` |
+| **MCP Server** | `mcp.sefaria.org/healthz` | GET | `200` | 4 cycles | `MCP_HEALTH_URL` |
+| **AI Chatbot** | `chat.sefaria.org/api/health` | GET | `200` | 4 cycles | `AI_CHATBOT_HEALTH_URL` |
 | **Linker** | `…/api/find-refs` | POST | `202` + async result | 3 cycles | `LINKER_HEALTH_URL` |
 
-The **Linker** uses a two-phase async check (see below) and has a higher threshold because it is the noisiest service.
+The **Linker** uses a two-phase async check (see below) and has a higher threshold because it is the noisiest service. **MCP Server** and **AI Chatbot** use a higher threshold (4) because their origins are restarted on a daily schedule (~07:2x UTC), briefly returning Cloudflare `521`; requiring four consecutive failures absorbs that routine restart while still catching a sustained outage.
 
 ## How it works
 
 A single check **cycle** runs every `HEALTH_CHECK_INTERVAL` seconds (default 60):
 
-1. **Check** — All services are checked **in parallel** ([`ThreadPoolExecutor`](https://docs.python.org/3/library/concurrent.futures.html)) so one slow/down service never blocks the others. Each request is retried up to `HEALTH_CHECK_RETRIES` times with `HEALTH_CHECK_RETRY_DELAY` seconds between attempts.
-2. **Persist** — Every result is written to the `HealthCheck` table (status, HTTP code, response time, error).
+1. **Check** — All services are checked **in parallel** ([`ThreadPoolExecutor`](https://docs.python.org/3/library/concurrent.futures.html)) so one slow/down service never blocks the others. Each request is retried up to `HEALTH_CHECK_RETRIES` times with `HEALTH_CHECK_RETRY_DELAY` seconds between attempts. **Worker threads do pure HTTP and never touch the database** — see *Conclusive vs. inconclusive results* below.
+2. **Persist** — Conclusive results are written to the `HealthCheck` table (status, HTTP code, response time, error) in a single bulk write, in the scheduler thread. Persistence is best-effort: a failure to write to the monitor's own DB is logged and never turned into a fake outage.
 3. **Detect transitions** — A `StateTracker` compares each result against the last known state and decides whether a *reportable* transition occurred.
 4. **Alert** — On a confirmed `went_down` or `recovered` transition, a Slack Block Kit message is sent.
+
+### Conclusive vs. inconclusive results
+
+A check result is one of three kinds:
+
+- **`up`** — the target answered correctly.
+- **`down`** — the target answered incorrectly or was unreachable. This is a real, reportable outage and counts toward the failure threshold.
+- **`error`** — the *monitor itself* couldn't complete the check (e.g. its own database was unreachable, or a worker crashed). This is **inconclusive**: it says nothing about the target, so it is never persisted, never counted toward the threshold, never alerted on, and never shown on the status page. The last known real state is preserved.
+
+This distinction is what stops a hiccup in the monitor's *own* infrastructure from flapping every service "down" at once. Worker threads also never open a database connection, which removes the per-cycle connection leak that previously exhausted Postgres ("too many clients") and produced exactly those phantom outages.
 
 ### Confirmation logic (the important part)
 

@@ -78,7 +78,7 @@
                     <span class="status-dot {% if overall_status != 'operational' %}pulse{% endif %}"></span>
                 </div>
                 <span class="status-text">{{ status_label }}</span>
-                <span class="last-updated">Last checked: <time id="last-checked">just now</time></span>
+                <span class="last-updated">Last checked: <time id="last-checked" data-checked="{{ last_checked_iso }}">just now</time></span>
             </div>
             <div class="status-quote">
                 <span class="quote-hebrew" lang="he">{{ quote.hebrew }}</span>
@@ -180,78 +180,44 @@
     </div>
 
     <script>
-        // Update "last checked" time every second
         (function () {
-            const lastChecked = document.getElementById('last-checked');
-            let seconds = 0;
-            setInterval(function () {
-                seconds += 1;
-                if (seconds < 60) {
-                    lastChecked.textContent = seconds + 's ago';
+            // ---- Truthful "last checked N ago" --------------------------------
+            // Anchored to the real timestamp of the most recent check, not a
+            // counter that resets to zero on every page load.
+            const el = document.getElementById('last-checked');
+            const checkedAt = el && el.dataset.checked ? new Date(el.dataset.checked) : null;
+
+            function renderElapsed() {
+                if (!checkedAt || isNaN(checkedAt)) { return; }
+                const secs = Math.max(0, Math.round((Date.now() - checkedAt) / 1000));
+                if (secs < 60) {
+                    el.textContent = secs + 's ago';
                 } else {
-                    const mins = Math.floor(seconds / 60);
-                    lastChecked.textContent = mins + 'm ago';
+                    el.textContent = Math.floor(secs / 60) + 'm ago';
                 }
-            }, 1000);
-
-            // Auto-refresh: Reload page every 60 seconds to get fresh data
-            setTimeout(function () {
-                window.location.reload();
-            }, 60000);
-
-            // Dynamic Favicon with Status Dot
-            function updateFaviconWithStatus() {
-                const favicon = document.getElementById('favicon');
-                const overallStatus = "{{ overall_status }}";
-
-                // Map Django status to colors from our CSS
-                const colorMap = {
-                    'operational': '#10B981',
-                    'partial': '#F59E0B',
-                    'major': '#EF4444'
-                };
-
-                const dotColor = colorMap[overallStatus] || '#6B7280';
-
-                const img = new Image();
-                img.src = favicon.href;
-                img.crossOrigin = "anonymous"; // Basic precaution
-
-                img.onload = function () {
-                    const canvas = document.createElement('canvas');
-                    canvas.width = 32;
-                    canvas.height = 32;
-                    const ctx = canvas.getContext('2d');
-
-                    // 1. Draw original favicon
-                    ctx.drawImage(img, 0, 0, 32, 32);
-
-                    // 2. Clear a small circle area for the dot (optional but cleaner)
-                    ctx.globalCompositeOperation = 'destination-out';
-                    ctx.beginPath();
-                    ctx.arc(24, 24, 8, 0, 2 * Math.PI);
-                    ctx.fill();
-                    ctx.globalCompositeOperation = 'source-over';
-
-                    // 3. Draw white border for the dot
-                    ctx.beginPath();
-                    ctx.arc(24, 24, 8, 0, 2 * Math.PI);
-                    ctx.fillStyle = 'white';
-                    ctx.fill();
-
-                    // 4. Draw the status color dot
-                    ctx.beginPath();
-                    ctx.arc(24, 24, 6, 0, 2 * Math.PI);
-                    ctx.fillStyle = dotColor;
-                    ctx.fill();
-
-                    // 5. Update the favicon link
-                    favicon.href = canvas.toDataURL('image/png');
-                };
             }
+            renderElapsed();
+            setInterval(renderElapsed, 1000);
 
-            // Run on load
-            updateFaviconWithStatus();
+            // Auto-refresh to pick up fresh data.
+            setTimeout(function () { window.location.reload(); }, 60000);
+
+            // ---- Status-colored favicon (simple SVG dot) ----------------------
+            const dotColor = {
+                'operational': '#5AA98C',
+                'partial': '#CCB479',
+                'major': '#D1574B'
+            }["{{ overall_status }}"] || '#7C8AA0';
+
+            const svg =
+                '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">' +
+                '<circle cx="16" cy="16" r="14" fill="' + dotColor + '"/>' +
+                '</svg>';
+            const favicon = document.getElementById('favicon');
+            if (favicon) {
+                favicon.type = 'image/svg+xml';
+                favicon.href = 'data:image/svg+xml,' + encodeURIComponent(svg);
+            }
         })();
     </script>
 </body>
