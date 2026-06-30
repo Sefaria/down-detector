@@ -261,7 +261,7 @@ Cleanup runs automatically inside the scheduler; the standalone command exists f
 - **Dynamic favicon** — A colored status dot (SVG) reflects the overall status.
 - **Live updates** — The page polls a cached `/api/status/` JSON endpoint every 30s and patches the banner and per-service rows in place; a slow 5-minute full reload picks up incidents, the quote, and uptime history. The page view and API are both cached for a short TTL (`@cache_page`).
 - **Incident feeds** — RSS (`/history.rss`) and Atom (`/history.atom`) feeds of the incident history, built on Django's syndication framework and advertised for autodiscovery. See [`feeds.py`](monitoring/feeds.py).
-- **SEO** — Open Graph + Twitter cards, JSON-LD, `robots.txt`, and `sitemap.xml`, targeting the query "is Sefaria down".
+- **SEO & social preview** — Open Graph + Twitter cards (with an **absolute** 1200×630 preview image so crawlers actually render it), `theme-color`, JSON-LD, `robots.txt`, and `sitemap.xml`, targeting the query "is Sefaria down". Regenerate the preview image with `python scripts/generate_og_image.py` (needs `pip install Pillow`; dev-only, not a runtime dependency).
 
 To post an incident: log into `/admin/`, add a `Message` (severity high/medium), and it appears immediately. Mark it resolved via the bulk admin action. To schedule maintenance, add a `Maintenance Window` (title, affected services, start/end) — affected services then show "Under Maintenance" and their Slack alerts are suppressed for the duration.
 

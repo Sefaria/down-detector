@@ -10,6 +10,7 @@
         content="Check if Sefaria is down. Real-time status for Sefaria.org, API, and related services. View active incidents and uptime history.">
     <meta name="keywords"
         content="is sefaria down, sefaria status, sefaria uptime, sefaria server status, jewish texts online">
+    <meta name="theme-color" content="#18345D">
     <link rel="canonical" href="https://status.sefaria.org/">
 
     <!-- Open Graph -->
@@ -19,14 +20,20 @@
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://status.sefaria.org/">
     <meta property="og:site_name" content="Sefaria Status">
-    <meta property="og:image" content="{% static 'img/og-image.png' %}">
+    <meta property="og:image" content="{{ og_image_url }}">
+    <meta property="og:image:type" content="image/png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="Sefaria Status — real-time status of Sefaria's services">
 
     <!-- Twitter Card -->
     <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:site" content="@SefariaProject">
     <meta name="twitter:title" content="Is Sefaria Down? - Sefaria Status & Service Health">
     <meta name="twitter:description"
         content="Check real-time status of Sefaria services. See if Sefaria is down or experiencing issues.">
-    <meta name="twitter:image" content="{% static 'img/og-image.png' %}">
+    <meta name="twitter:image" content="{{ og_image_url }}">
+    <meta name="twitter:image:alt" content="Sefaria Status — real-time status of Sefaria's services">
 
     <!-- Schema.org JSON-LD -->
     <script type="application/ld+json">

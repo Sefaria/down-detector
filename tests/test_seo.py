@@ -77,3 +77,14 @@ class TestSEO:
         assert 'application/ld+json' in content
         assert '"@type": "WebSite"' in content
         assert '"name": "Sefaria Status"' in content
+
+    def test_og_image_is_absolute(self, client):
+        """Social-preview crawlers require an absolute og:image/twitter:image URL."""
+        content = client.get(reverse("monitoring:status")).content.decode()
+
+        # The image URL must be absolute (scheme + host), not a relative /static path.
+        assert 'property="og:image" content="http' in content
+        assert 'name="twitter:image" content="http' in content
+        # And the large-image card metadata should be present.
+        assert 'og:image:width' in content and "1200" in content
+        assert 'twitter:card' in content and "summary_large_image" in content

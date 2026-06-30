@@ -7,6 +7,7 @@ from datetime import timedelta
 from django.conf import settings
 from django.db.models import Min, Q
 from django.http import HttpResponse, JsonResponse
+from django.templatetags.static import static
 from django.utils import timezone
 from django.views.decorators.cache import cache_page
 from django.shortcuts import render
@@ -522,6 +523,8 @@ def status_page(request):
         "uptime_history": get_uptime_history(),
         "uptime_days": 90,
         "maintenance_windows": maintenance_windows,
+        # Absolute URL for social-preview crawlers (they reject relative paths).
+        "og_image_url": request.build_absolute_uri(static("img/og-image.png")),
     }
     
     return render(request, "monitoring/status.html", context)
