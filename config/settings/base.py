@@ -210,6 +210,9 @@ AXES_COOLOFF_TIME = env.int("AXES_COOLOFF_HOURS", default=1)  # hours
 # clears the user's failure count. Reset manually with `manage.py axes_reset`.
 AXES_LOCKOUT_PARAMETERS = ["username"]
 AXES_RESET_ON_SUCCESS = True
+# Keep a durable audit trail of every failed attempt (the "Access failures"
+# admin). AccessAttempt resets on success/lockout, so this is the lasting log.
+AXES_ENABLE_ACCESS_FAILURE_LOG = True
 
 # Silence axes.W006 (it recommends adding 'ip_address'). We deliberately lock
 # by username only: behind the reverse proxy a client IP isn't reliable, and

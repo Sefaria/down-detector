@@ -279,7 +279,13 @@ From there operators post incident `Message`s, schedule `Maintenance` windows, f
 
 **Least-privilege staff.** A predefined **`Operators`** group (created by migration) grants exactly the rights to manage incidents and maintenance, force-resolve outages, and read health checks — but **not** to delete records or manage users. Add staff to this group (in the admin: Users → select user → add to *Operators*) and mark them `is_staff` rather than making them superusers.
 
-**Brute-force protection.** Admin logins are protected by [`django-axes`](https://django-axes.readthedocs.io/): after `AXES_FAILURE_LIMIT` failed attempts (default 5) a username is locked for `AXES_COOLOFF_HOURS` (default 1h); a successful login clears the count. Lockout is keyed on **username** (not IP, which is unreliable behind the proxy). Clear a lockout manually with `python manage.py axes_reset` (or `axes_reset_username <name>`).
+**Brute-force protection.** Admin logins are protected by [`django-axes`](https://django-axes.readthedocs.io/): after `AXES_FAILURE_LIMIT` failed attempts (default 5) a username is locked for `AXES_COOLOFF_HOURS` (default 1h, returning HTTP 429); a successful login clears the count. Lockout is keyed on **username** (not IP, which is unreliable behind the proxy). Clear a lockout manually with `python manage.py axes_reset` (or `axes_reset_username <name>`).
+
+Axes records what it sees under the **AXES** section of the admin:
+
+- **Access attempts** — the live lockout state: one row per username with `failures_since_start`, IP, and user agent. Reset on a successful login or by `axes_reset`. This is what drives lockout.
+- **Access failures** — a durable audit log of every failed attempt (enabled via `AXES_ENABLE_ACCESS_FAILURE_LOG`), kept even after attempts reset.
+- **Access logs** — login/logout events with timestamps.
 
 **Is it safe to leave `/admin/` publicly reachable?** Yes, with the defaults this project ships — but understand the trade-off:
 

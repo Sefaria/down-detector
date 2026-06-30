@@ -1,38 +1,86 @@
-{% comment %}Live system snapshot for the admin landing page.{% endcomment %}
-<div class="module" style="margin-bottom:20px;">
-  <h2 style="display:flex;align-items:center;gap:10px;">
-    System status
-    <span style="font-weight:600;
-      color:{% if overall_status == 'operational' %}#2F7A52{% elif overall_status == 'major' %}#9B3144{% elif overall_status == 'partial' %}#9B3144{% elif overall_status == 'maintenance' %}#2D5483{% else %}#876716{% endif %};">
-      {{ status_label }}
-    </span>
-  </h2>
-  <table style="width:100%;">
-    <thead>
-      <tr><th>Service</th><th>Status</th><th>Response</th></tr>
-    </thead>
-    <tbody>
-      {% for s in services %}
-      <tr>
-        <td>{{ s.name }}</td>
-        <td>
-          <b style="color:{% if s.status == 'up' %}#2F7A52{% elif s.status == 'down' %}#9B3144{% elif s.status == 'maintenance' %}#2D5483{% elif s.status == 'degraded' %}#876716{% else %}#666664{% endif %};">
-            {{ s.status|upper }}
-          </b>
-        </td>
-        <td>{% if s.response_time_ms %}{{ s.response_time_ms }} ms{% else %}—{% endif %}</td>
-      </tr>
-      {% empty %}
-      <tr><td colspan="3">No services reporting yet.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  <p style="margin-top:10px;">
-    Open outages: <b>{{ open_outages }}</b> &nbsp;·&nbsp;
-    Active incidents: <b>{{ active_incidents }}</b> &nbsp;·&nbsp;
-    Maintenance in progress: <b>{{ maintenance_now|length }}</b>
-    {% if maintenance_now %}
-      ({% for m in maintenance_now %}{{ m.title }}{% if not forloop.last %}, {% endif %}{% endfor %})
-    {% endif %}
-  </p>
+{% comment %}Live system snapshot for the admin landing page.
+
+Uses the admin's own CSS variables (var(--body-fg) etc.) so it reads correctly
+in both light and dark admin themes. Status is shown as solid-color pills with
+white text, so contrast holds regardless of the page background.
+{% endcomment %}
+<style>
+.sd-panel { margin-bottom: 24px; }
+.sd-panel table { width: 100%; border-collapse: collapse; }
+.sd-panel caption { caption-side: top; text-align: left; }
+.sd-panel th, .sd-panel td {
+    padding: 10px 14px;
+    text-align: left;
+    white-space: nowrap;
+    border-bottom: 1px solid var(--hairline-color, #e0e0e0);
+    vertical-align: middle;
+}
+.sd-panel th {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--body-quiet-color, #767676);
+}
+.sd-panel td { color: var(--body-fg, #303030); font-size: 14px; }
+.sd-col-svc { width: 100%; }                 /* service name takes remaining width */
+.sd-col-num { text-align: right; font-variant-numeric: tabular-nums; }
+.sd-pill {
+    display: inline-block;
+    min-width: 86px;
+    text-align: center;
+    padding: 3px 12px;
+    border-radius: 999px;
+    font-weight: 700;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #fff;
+}
+.sd-up        { background: #2e7d52; }
+.sd-degraded  { background: #b07d18; }
+.sd-down      { background: #b3322f; }
+.sd-maintenance { background: #2f6fb0; }
+.sd-unknown   { background: #6b6b6b; }
+.sd-summary { margin: 4px 0 16px; font-size: 15px; color: var(--body-fg, #303030); }
+.sd-counts { margin-top: 14px; font-size: 14px; color: var(--body-fg, #303030); }
+.sd-counts b { font-size: 16px; }
+</style>
+
+<div class="module sd-panel">
+    <h2>System status</h2>
+    <div style="padding: 12px 14px 0;">
+        <p class="sd-summary">
+            Overall:
+            <span class="sd-pill sd-{{ overall_status }}">{{ status_label }}</span>
+        </p>
+        <table>
+            <thead>
+                <tr>
+                    <th class="sd-col-svc">Service</th>
+                    <th>Status</th>
+                    <th class="sd-col-num">Response</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in services %}
+                <tr>
+                    <td class="sd-col-svc">{{ s.name }}</td>
+                    <td>
+                        <span class="sd-pill sd-{{ s.status }}">{% if s.status == 'up' %}Operational{% elif s.status == 'down' %}Down{% elif s.status == 'degraded' %}Degraded{% elif s.status == 'maintenance' %}Maintenance{% else %}Unknown{% endif %}</span>
+                    </td>
+                    <td class="sd-col-num">{% if s.response_time_ms %}{{ s.response_time_ms }} ms{% else %}—{% endif %}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="3">No services reporting yet.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <p class="sd-counts">
+            Open outages: <b>{{ open_outages }}</b> &nbsp;·&nbsp;
+            Active incidents: <b>{{ active_incidents }}</b> &nbsp;·&nbsp;
+            Maintenance in progress: <b>{{ maintenance_now|length }}</b>
+            {% if maintenance_now %}
+            ({% for m in maintenance_now %}{{ m.title }}{% if not forloop.last %}, {% endif %}{% endfor %})
+            {% endif %}
+        </p>
+    </div>
 </div>

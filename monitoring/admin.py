@@ -16,6 +16,29 @@ def _monitored_service_names() -> list[str]:
     return [s["name"] for s in getattr(settings, "MONITORED_SERVICES", [])]
 
 
+def _pill(label: str, bg: str):
+    """A solid-color pill with white text — readable on light *and* dark admin."""
+    return format_html(
+        '<span style="display:inline-block;min-width:74px;text-align:center;'
+        'padding:2px 10px;border-radius:999px;background:{};color:#fff;'
+        'font-weight:700;font-size:11px;">{}</span>',
+        bg, label,
+    )
+
+
+# Status/severity colors chosen to keep white text legible on either theme.
+_PILL_COLORS = {
+    "up": "#2e7d52",
+    "down": "#b3322f",
+    "degraded": "#b07d18",
+    "maintenance": "#2f6fb0",
+    "unknown": "#6b6b6b",
+    "high": "#b3322f",
+    "medium": "#b07d18",
+    "resolved": "#2e7d52",
+}
+
+
 class MaintenanceAdminForm(forms.ModelForm):
     """Pick affected services from checkboxes so they can't be mistyped.
 
@@ -78,10 +101,7 @@ class HealthCheckAdmin(admin.ModelAdmin):
 
     @admin.display(description="Status", ordering="status")
     def status_badge(self, obj):
-        color = {"up": "#2F7A52", "down": "#9B3144"}.get(obj.status, "#666664")
-        return format_html(
-            '<b style="color:{}">{}</b>', color, obj.status.upper()
-        )
+        return _pill(obj.status.upper(), _PILL_COLORS.get(obj.status, "#6b6b6b"))
 
     @admin.display(description="Error")
     def error_preview(self, obj):
@@ -264,14 +284,14 @@ class MaintenanceAdmin(admin.ModelAdmin):
     def state(self, obj):
         """In progress / Scheduled / Past, at a glance (color-coded)."""
         if not obj.active:
-            label, color = "Cancelled", "#666664"
+            label, color = "Cancelled", "#6b6b6b"
         elif obj.is_in_progress():
-            label, color = "In progress", "#2D5483"
+            label, color = "In progress", "#2f6fb0"
         elif obj.is_upcoming():
-            label, color = "Scheduled", "#876716"
+            label, color = "Scheduled", "#b07d18"
         else:
-            label, color = "Past", "#666664"
-        return format_html('<b style="color:{}">{}</b>', color, label)
+            label, color = "Past", "#6b6b6b"
+        return _pill(label, color)
 
 
 @admin.register(Message)
@@ -287,13 +307,9 @@ class MessageAdmin(admin.ModelAdmin):
 
     @admin.display(description="Severity", ordering="severity")
     def severity_badge(self, obj):
-        color = {
-            "high": "#9B3144",
-            "medium": "#876716",
-            "resolved": "#2F7A52",
-        }.get(obj.severity, "#666664")
-        return format_html(
-            '<b style="color:{}">{}</b>', color, obj.get_severity_display()
+        return _pill(
+            obj.get_severity_display(),
+            _PILL_COLORS.get(obj.severity, "#6b6b6b"),
         )
 
     fieldsets = (
