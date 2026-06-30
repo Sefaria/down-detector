@@ -93,6 +93,35 @@
             </div>
         </section>
 
+        <!-- Scheduled Maintenance -->
+        {% if maintenance_windows %}
+        <section class="maintenance">
+            <h2>Scheduled Maintenance</h2>
+            {% for window in maintenance_windows %}
+            <div class="incident maintenance-window">
+                <div class="incident-header">
+                    <span class="severity-badge maintenance">
+                        {% if window.is_in_progress %}In progress{% else %}Scheduled{% endif %}
+                    </span>
+                    <div class="incident-times">
+                        <time datetime="{{ window.start_time|date:'c' }}">
+                            {{ window.start_time|date:"M j, Y g:i A" }} UTC
+                        </time>
+                        <time datetime="{{ window.end_time|date:'c' }}" class="updated-time">
+                            to {{ window.end_time|date:"M j, Y g:i A" }} UTC
+                        </time>
+                    </div>
+                </div>
+                <p class="incident-title">{{ window.title }}</p>
+                {% if window.description %}<p class="incident-text">{{ window.description }}</p>{% endif %}
+                {% if window.affected_list %}
+                <p class="maintenance-affected">Affected: {{ window.affected_list|join:", " }}</p>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </section>
+        {% endif %}
+
         <!-- Service Status List -->
         <section class="services">
             <h2>Services</h2>
@@ -130,6 +159,8 @@
                         {% if service.detail %}
                         <span class="error-hint" title="{{ service.detail }}">ⓘ</span>
                         {% endif %}
+                        {% elif service.status == 'maintenance' %}
+                        <span class="status-badge status-maintenance">Maintenance</span>
                         {% else %}
                         <span class="status-badge status-unknown">Unknown</span>
                         {% endif %}
@@ -291,6 +322,9 @@
                             String(s.detail).replace(/"/g, '&quot;') + '">ⓘ</span>';
                     }
                     return h;
+                }
+                if (s.status === 'maintenance') {
+                    return '<span class="status-badge status-maintenance">Maintenance</span>';
                 }
                 return '<span class="status-badge status-unknown">Unknown</span>';
             }

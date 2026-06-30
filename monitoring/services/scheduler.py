@@ -15,7 +15,7 @@ from apscheduler.triggers.cron import CronTrigger
 from django.conf import settings
 from django.utils import timezone
 
-from monitoring.models import HealthCheck
+from monitoring.models import HealthCheck, Maintenance
 from monitoring.services.checker import check_all_services
 from monitoring.services.state import get_state_tracker
 from monitoring.services.alerter import process_transitions_with_alerts
@@ -45,10 +45,26 @@ def run_health_check_cycle():
         # 2. Run checks and persist results
         results = check_all_services(persist=True)
         
-        # 3. Process results relative to the tracker's initialized state
+        # 3. Process results relative to the tracker's initialized state.
+        #    (The tracker still records outages/recoveries so its state and the
+        #    status page stay correct; we only suppress the Slack *alert*.)
         transitions = tracker.process_results(results)
-        
-        # Send Slack alerts for transitions
+
+        # 4. Suppress alerts for services inside an active maintenance window —
+        #    planned work should not page anyone.
+        if transitions:
+            under_maintenance = Maintenance.services_under_maintenance()
+            if under_maintenance:
+                kept = [t for t in transitions if t[0].service_name not in under_maintenance]
+                suppressed = len(transitions) - len(kept)
+                if suppressed:
+                    logger.info(
+                        f"Suppressed {suppressed} alert(s) for services under "
+                        f"maintenance: {sorted(under_maintenance)}"
+                    )
+                transitions = kept
+
+        # Send Slack alerts for the remaining transitions
         if transitions:
             alerts_sent = process_transitions_with_alerts(transitions)
             logger.info(f"Sent {alerts_sent} Slack alerts")

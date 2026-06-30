@@ -601,6 +601,28 @@ header .subtitle {
     border-left-color: var(--status-up);
 }
 
+.incident.maintenance-window {
+    border-left-color: var(--status-maint);
+}
+
+.severity-badge.maintenance {
+    background: rgba(72, 113, 191, 0.14);
+    color: var(--status-maint-text);
+}
+
+.incident-title {
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: var(--text);
+    margin-bottom: 0.25rem;
+}
+
+.maintenance-affected {
+    margin-top: 0.4rem;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
 .incident-header {
     display: flex;
     justify-content: space-between;

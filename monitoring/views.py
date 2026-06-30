@@ -12,7 +12,7 @@ from django.views.decorators.cache import cache_page
 from django.shortcuts import render
 from django.urls import reverse
 
-from monitoring.models import HealthCheck, Message, Outage
+from monitoring.models import HealthCheck, Message, Outage, Maintenance
 
 
 # -- Status-page quotes (Hebrew, English, Sefaria ref, display source) ------
@@ -160,6 +160,7 @@ def get_service_statuses() -> list[dict]:
         settings, "ALERT_AFTER_CONSECUTIVE_FAILURES", 2
     )
     default_degraded_ms = getattr(settings, "DEGRADED_RESPONSE_MS", 2000)
+    maint_services = Maintenance.services_under_maintenance()
     statuses = []
 
     for config in services:
@@ -176,11 +177,11 @@ def get_service_statuses() -> list[dict]:
         if not recent_checks:
             statuses.append({
                 "name": service_name,
-                "status": "unknown",
+                "status": "maintenance" if service_name in maint_services else "unknown",
                 "response_time_ms": None,
                 "last_checked": None,
                 "status_code": None,
-                "detail": "",
+                "detail": "Under maintenance" if service_name in maint_services else "",
             })
             continue
 
@@ -209,6 +210,12 @@ def get_service_statuses() -> list[dict]:
             confirmed_status = "up"
             detail = ""
 
+        # An active maintenance window overrides the measured state: planned
+        # work is shown as "Under Maintenance", not down/degraded.
+        if service_name in maint_services:
+            confirmed_status = "maintenance"
+            detail = "Under maintenance"
+
         statuses.append({
             "name": service_name,
             "status": confirmed_status,
@@ -226,18 +233,21 @@ def get_overall_status(service_statuses: list[dict], active_incidents: list) -> 
     """
     Determine the overall system status.
 
-    Returns one of: "operational", "degraded", "partial", "major".
+    Returns one of: "operational", "degraded", "partial", "major",
+    "maintenance".
 
     - "major"      — a high-severity incident, or *every* service is down.
     - "partial"    — some (but not all) services are down.
-    - "degraded"   — nothing down, but a service is slow or a medium-severity
-                     incident is active.
+    - "maintenance"— nothing down, but a service is under maintenance.
+    - "degraded"   — nothing down/maintenance, but a service is slow or a
+                     medium-severity incident is active.
     - "operational"— everything healthy.
     """
     statuses = [s["status"] for s in service_statuses]
     total = len(statuses)
     down = sum(1 for s in statuses if s == "down")
     degraded = sum(1 for s in statuses if s == "degraded")
+    maintenance = sum(1 for s in statuses if s == "maintenance")
 
     has_high_incident = any(i.severity == "high" for i in active_incidents)
     has_medium_incident = any(i.severity == "medium" for i in active_incidents)
@@ -246,6 +256,8 @@ def get_overall_status(service_statuses: list[dict], active_incidents: list) -> 
         return "major"
     if down > 0:
         return "partial"
+    if maintenance > 0:
+        return "maintenance"
     if degraded > 0 or has_medium_incident:
         return "degraded"
     return "operational"
@@ -478,6 +490,9 @@ def status_page(request):
 
     # Get active incidents
     active_incidents = list(Message.objects.filter(active=True).order_by("-created_at"))
+
+    # Scheduled / in-progress maintenance windows
+    maintenance_windows = list(Maintenance.current_and_upcoming())
     
     # Get recent resolved incidents (last 7 days)
     resolved_incidents = list(
@@ -506,6 +521,7 @@ def status_page(request):
         "last_checked_iso": last_checked_iso,
         "uptime_history": get_uptime_history(),
         "uptime_days": 90,
+        "maintenance_windows": maintenance_windows,
     }
     
     return render(request, "monitoring/status.html", context)

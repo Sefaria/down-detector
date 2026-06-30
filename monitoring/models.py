@@ -1,7 +1,9 @@
 """
 Models for the Sefaria status monitoring system.
 """
+from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
 
 class HealthCheck(models.Model):
@@ -67,6 +69,92 @@ class Outage(models.Model):
             from django.utils import timezone
             return timezone.now() - self.start_time
         return self.end_time - self.start_time
+
+
+class Maintenance(models.Model):
+    """
+    An operator-scheduled maintenance window for one or more services.
+
+    While a window is in progress, affected services are shown as "Under
+    Maintenance" on the status page and their down/recovery Slack alerts are
+    suppressed (planned work should not page anyone). Authored in the admin.
+    """
+
+    title = models.CharField(max_length=200)
+    description = models.TextField(blank=True, default="")
+    affected_services = models.TextField(
+        blank=True,
+        default="",
+        help_text=(
+            "Comma-separated service names exactly as in MONITORED_SERVICES "
+            "(e.g. 'MCP Server, Linker'). Leave blank to cover all services."
+        ),
+    )
+    start_time = models.DateTimeField(db_index=True)
+    end_time = models.DateTimeField()
+    active = models.BooleanField(
+        default=True,
+        db_index=True,
+        help_text="Uncheck to cancel this window without deleting it.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-start_time"]
+        indexes = [
+            models.Index(fields=["active", "start_time", "end_time"]),
+        ]
+        verbose_name = "Maintenance Window"
+        verbose_name_plural = "Maintenance Windows"
+
+    def __str__(self):
+        return f"{self.title} ({self.start_time:%Y-%m-%d %H:%M} UTC)"
+
+    @property
+    def affected_list(self) -> list[str]:
+        """Service names this window covers; empty list means *all* services."""
+        return [s.strip() for s in self.affected_services.split(",") if s.strip()]
+
+    def covers(self, service_name: str) -> bool:
+        """True if this window applies to the given service (blank = all)."""
+        affected = self.affected_list
+        return not affected or service_name in affected
+
+    def is_in_progress(self, now=None) -> bool:
+        now = now or timezone.now()
+        return self.active and self.start_time <= now <= self.end_time
+
+    def is_upcoming(self, now=None) -> bool:
+        now = now or timezone.now()
+        return self.active and self.start_time > now
+
+    @classmethod
+    def current_and_upcoming(cls, now=None):
+        """Active windows that are in progress or scheduled for the future."""
+        now = now or timezone.now()
+        return cls.objects.filter(active=True, end_time__gte=now).order_by("start_time")
+
+    @classmethod
+    def services_under_maintenance(cls, now=None) -> set[str]:
+        """
+        Names of services currently inside an in-progress maintenance window.
+
+        A window with a blank ``affected_services`` covers every configured
+        service, so we expand it against ``MONITORED_SERVICES``.
+        """
+        now = now or timezone.now()
+        in_progress = cls.objects.filter(
+            active=True, start_time__lte=now, end_time__gte=now
+        )
+        all_names = [s["name"] for s in getattr(settings, "MONITORED_SERVICES", [])]
+        covered: set[str] = set()
+        for window in in_progress:
+            affected = window.affected_list
+            if not affected:
+                return set(all_names)
+            covered.update(affected)
+        return covered
 
 
 class Message(models.Model):

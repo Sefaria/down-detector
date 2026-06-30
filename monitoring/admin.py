@@ -6,7 +6,7 @@ import logging
 from django.contrib import admin
 from django.utils import timezone
 
-from .models import HealthCheck, Outage, Message
+from .models import HealthCheck, Outage, Message, Maintenance
 
 logger = logging.getLogger(__name__)
 
@@ -136,6 +136,36 @@ class OutageAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return request.user.is_superuser
+
+
+@admin.register(Maintenance)
+class MaintenanceAdmin(admin.ModelAdmin):
+    """Admin for operator-scheduled maintenance windows."""
+
+    list_display = [
+        "title",
+        "state",
+        "affected_services",
+        "start_time",
+        "end_time",
+        "active",
+    ]
+    list_filter = ["active"]
+    search_fields = ["title", "description", "affected_services"]
+    date_hierarchy = "start_time"
+    ordering = ["-start_time"]
+    list_editable = ["active"]
+
+    @admin.display(description="State")
+    def state(self, obj):
+        """In progress / Scheduled / Past, at a glance."""
+        if not obj.active:
+            return "Cancelled"
+        if obj.is_in_progress():
+            return "In progress"
+        if obj.is_upcoming():
+            return "Scheduled"
+        return "Past"
 
 
 @admin.register(Message)
