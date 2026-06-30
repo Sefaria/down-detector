@@ -119,6 +119,35 @@
             </div>
         </section>
 
+        <!-- Uptime History -->
+        {% if uptime_history %}
+        <section class="uptime">
+            <h2>Uptime <span class="uptime-window">last {{ uptime_days }} days</span></h2>
+            <div class="uptime-list">
+                {% for svc in uptime_history %}
+                <div class="uptime-row">
+                    <div class="uptime-row-head">
+                        <span class="uptime-name">{{ svc.name }}</span>
+                        <span class="uptime-pct">
+                            {% if svc.uptime_pct is not None %}{{ svc.uptime_pct }}% uptime{% else %}No data yet{% endif %}
+                        </span>
+                    </div>
+                    <div class="uptime-bars">
+                        {% for d in svc.days %}
+                        <span class="uptime-bar status-{{ d.status }}"
+                            title="{{ d.date }}{% if d.uptime is not None %} — {{ d.uptime }}% uptime{% else %} — no data{% endif %}"></span>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endfor %}
+                <div class="uptime-axis">
+                    <span>{{ uptime_days }} days ago</span>
+                    <span>today</span>
+                </div>
+            </div>
+        </section>
+        {% endif %}
+
         <!-- Active Incidents -->
         {% if active_incidents %}
         <section class="incidents active-incidents">

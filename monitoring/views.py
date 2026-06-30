@@ -2,15 +2,17 @@
 Views for the status page.
 """
 import random
+from datetime import timedelta
 
 from django.conf import settings
-from django.db.models import Max
+from django.db.models import Min, Q
 from django.http import HttpResponse, JsonResponse
+from django.utils import timezone
 from django.views.decorators.cache import cache_page
 from django.shortcuts import render
 from django.urls import reverse
 
-from monitoring.models import HealthCheck, Message
+from monitoring.models import HealthCheck, Message, Outage
 
 
 # -- Status-page quotes (Hebrew, English, Sefaria ref, display source) ------
@@ -247,6 +249,127 @@ def _latest_check_iso(service_statuses: list[dict]) -> str:
     return max(check_times).isoformat() if check_times else ""
 
 
+# Below this fraction of a day up, the day's bar is "down" (major); any
+# downtime above it is shown as "partial" (a minor blip).
+_UPTIME_PARTIAL_FLOOR = 0.99
+
+
+def get_uptime_history(days: int = 90) -> list[dict]:
+    """
+    Per-service daily uptime for the last ``days``, for the timeline bars.
+
+    Downtime is derived from ``Outage`` records (one row per confirmed
+    downtime period), not from raw ``HealthCheck`` samples: outages persist
+    indefinitely and record true downtime, whereas health-check rows are
+    pruned at the retention horizon. Each day is classified as:
+
+    - ``up``      — no recorded downtime that day.
+    - ``partial`` — some downtime, but the day was >= 99% up (a brief blip).
+    - ``down``    — the day was < 99% up (a substantial outage).
+    - ``nodata``  — the service was not yet monitored that day.
+
+    "Monitored since" is the earliest activity we can see for the service
+    (earliest outage or earliest surviving health check). Days before it are
+    ``nodata`` rather than fake green, so the timeline never claims uptime
+    for days it has no evidence for.
+    """
+    services = getattr(settings, "MONITORED_SERVICES", [])
+    now = timezone.now()
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    window_start = today_start - timedelta(days=days - 1)
+
+    history: list[dict] = []
+    for cfg in services:
+        name = cfg["name"]
+
+        first_hc = HealthCheck.objects.filter(service_name=name).aggregate(
+            m=Min("checked_at")
+        )["m"]
+        first_outage = Outage.objects.filter(service_name=name).aggregate(
+            m=Min("start_time")
+        )["m"]
+        candidates = [t for t in (first_hc, first_outage) if t is not None]
+        monitored_since = min(candidates) if candidates else None
+
+        # Outages overlapping [window_start, now): start before now, and
+        # either still open or ended after the window began.
+        outages = list(
+            Outage.objects
+            .filter(service_name=name, start_time__lt=now)
+            .filter(Q(end_time__gte=window_start) | Q(end_time__isnull=True))
+            .only("start_time", "end_time")
+        )
+
+        day_buckets: list[dict] = []
+        total_down = 0.0
+        total_tracked = 0.0
+
+        for i in range(days):
+            day_start = window_start + timedelta(days=i)
+            day_end = day_start + timedelta(days=1)
+            # The most recent bucket only counts up to "now".
+            effective_end = min(day_end, now)
+
+            # No data for days entirely before monitoring began.
+            if monitored_since is None or monitored_since >= day_end:
+                day_buckets.append({
+                    "date": day_start.date().isoformat(),
+                    "status": "nodata",
+                    "uptime": None,
+                })
+                continue
+
+            # Clamp the first partial day of monitoring to when it started.
+            effective_start = max(day_start, monitored_since)
+            day_seconds = (effective_end - effective_start).total_seconds()
+            if day_seconds <= 0:
+                day_buckets.append({
+                    "date": day_start.date().isoformat(),
+                    "status": "nodata",
+                    "uptime": None,
+                })
+                continue
+
+            down = 0.0
+            for o in outages:
+                o_end = o.end_time or now
+                overlap_start = max(effective_start, o.start_time)
+                overlap_end = min(effective_end, o_end)
+                if overlap_end > overlap_start:
+                    down += (overlap_end - overlap_start).total_seconds()
+            down = min(down, day_seconds)
+            uptime = 1.0 - (down / day_seconds)
+
+            if down <= 0:
+                status = "up"
+            elif uptime >= _UPTIME_PARTIAL_FLOOR:
+                status = "partial"
+            else:
+                status = "down"
+
+            day_buckets.append({
+                "date": day_start.date().isoformat(),
+                "status": status,
+                "uptime": round(uptime * 100, 2),
+            })
+            total_down += down
+            total_tracked += day_seconds
+
+        overall_uptime = (
+            round((1.0 - total_down / total_tracked) * 100, 2)
+            if total_tracked > 0
+            else None
+        )
+        history.append({
+            "name": name,
+            "days": day_buckets,
+            "uptime_pct": overall_uptime,
+            "has_data": total_tracked > 0,
+        })
+
+    return history
+
+
 @cache_page(30)
 def status_page(request):
     """
@@ -283,6 +406,8 @@ def status_page(request):
         "status_label": status_label,
         "quote": quote,
         "last_checked_iso": last_checked_iso,
+        "uptime_history": get_uptime_history(),
+        "uptime_days": 90,
     }
     
     return render(request, "monitoring/status.html", context)

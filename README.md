@@ -249,11 +249,12 @@ Cleanup runs automatically inside the scheduler; the standalone command exists f
 [`monitoring/templates/monitoring/status.html`](monitoring/templates/monitoring/status.html) renders a self-refreshing public page:
 
 - **Overall banner** — `All Systems Operational` / `Partial Issues` / `Major Outage`, computed from confirmed service states *and* active incident severity.
-- **Per-service list** — Operational / Down / Unknown, with last response time. A service shows "Down" only when its last `failure_threshold` checks all failed (mirrors the alert logic so the page and Slack never disagree).
+- **Per-service list** — Operational / Down / Unknown, with last response time. A service shows "Down" only when its last `failure_threshold` checks all failed (mirrors the alert logic so the page and Slack never disagree). A down service's tooltip shows a *sanitized* hint (e.g. "Service unreachable", "Unexpected response (HTTP 521)") — never the raw internal error, which stays in the admin.
+- **90-day uptime timeline** — Per-service daily bars (up / partial / down / no-data) with an overall uptime %, computed from `Outage` records (true downtime, not pruned like raw checks). Days before a service was first monitored show as "no data" rather than fake green. See `get_uptime_history` in [`views.py`](monitoring/views.py).
 - **Status-aware Tanakh verse** — A Hebrew + English verse, with a deep link to Sefaria, chosen from a pool that matches the current status (reassuring when up, hopeful during an outage). Defined in [`views.py`](monitoring/views.py).
 - **Incidents** — Operator-posted `Message` records (active + recent history), authored in the Django admin.
-- **Dynamic favicon** — A colored status dot is drawn onto the favicon client-side.
-- **Auto-refresh** — The page reloads every 60s; the view itself is cached for 30s (`@cache_page`).
+- **Dynamic favicon** — A colored status dot (SVG) reflects the overall status.
+- **Live updates** — The page polls a cached `/api/status/` JSON endpoint every 30s and patches the banner and per-service rows in place; a slow 5-minute full reload picks up incidents, the quote, and uptime history. The page view and API are both cached for a short TTL (`@cache_page`).
 - **SEO** — Open Graph + Twitter cards, JSON-LD, `robots.txt`, and `sitemap.xml`, targeting the query "is Sefaria down".
 
 To post an incident: log into `/admin/`, add a `Message` (severity high/medium), and it appears immediately. Mark it resolved via the bulk admin action.

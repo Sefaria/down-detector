@@ -358,6 +358,104 @@ header .subtitle {
     font-size: 0.85rem;
 }
 
+/* Uptime History */
+.uptime {
+    margin-bottom: 2rem;
+}
+
+.uptime h2 {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.75rem;
+    color: var(--text-secondary);
+}
+
+.uptime-window {
+    text-transform: none;
+    letter-spacing: normal;
+    font-weight: 400;
+    opacity: 0.6;
+}
+
+.uptime-list {
+    background: var(--bg-secondary);
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+    padding: 0.5rem 1.25rem 1rem;
+}
+
+.uptime-row {
+    padding: 0.75rem 0;
+}
+
+.uptime-row + .uptime-row {
+    border-top: 1px solid var(--border-color);
+}
+
+.uptime-row-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 0.45rem;
+}
+
+.uptime-name {
+    font-weight: 500;
+    font-size: 0.9rem;
+}
+
+.uptime-pct {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.uptime-bars {
+    display: flex;
+    gap: 2px;
+    align-items: stretch;
+    height: 30px;
+}
+
+.uptime-bar {
+    flex: 1 1 0;
+    min-width: 0;
+    border-radius: 2px;
+    background: var(--status-unknown);
+    transition: opacity 0.15s;
+}
+
+.uptime-bar:hover {
+    opacity: 0.65;
+}
+
+.uptime-bar.status-up {
+    background: var(--status-up);
+}
+
+.uptime-bar.status-partial {
+    background: var(--status-partial);
+}
+
+.uptime-bar.status-down {
+    background: var(--status-down);
+}
+
+.uptime-bar.status-nodata {
+    background: rgba(124, 138, 160, 0.18);
+}
+
+.uptime-axis {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 0.6rem;
+    color: var(--text-secondary);
+    font-size: 0.7rem;
+    opacity: 0.7;
+}
+
 /* Incidents */
 .incidents {
     margin-bottom: 2rem;
