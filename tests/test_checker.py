@@ -334,10 +334,66 @@ class TestCheckAllServices:
         )
         
         results = check_all_services()
-        
+
         # Should check all services from settings (test settings has 1 service)
         assert mock_check_service.call_count >= 1
         assert len(results) >= 1
+
+    @patch("monitoring.services.checker.check_service")
+    def test_worker_crash_is_error_not_down(self, mock_check_service):
+        """A worker raising unexpectedly yields 'error', never a false 'down'.
+
+        This is the regression guard for the phantom outages: a monitor-side
+        failure (e.g. our own DB unreachable) must not be reported as the
+        monitored service being down.
+        """
+        from monitoring.services.checker import check_all_services
+
+        mock_check_service.side_effect = Exception(
+            'connection to server at "10.0.3.3", port 5432 failed: FATAL: sorry'
+        )
+
+        results = check_all_services(persist=False)
+
+        assert len(results) >= 1
+        assert all(r.status == "error" for r in results)
+        assert all(r.is_conclusive is False for r in results)
+
+    @patch("monitoring.services.checker.HealthCheck.objects.bulk_create")
+    @patch("monitoring.services.checker.check_service")
+    def test_persist_failure_does_not_raise(
+        self, mock_check_service, mock_bulk_create
+    ):
+        """A DB write failure during persistence is swallowed, not propagated."""
+        from monitoring.services.checker import check_all_services, HealthCheckResult
+
+        mock_check_service.return_value = HealthCheckResult(
+            service_name="test",
+            status="up",
+            response_time_ms=100,
+            status_code=200,
+            error_message="",
+        )
+        mock_bulk_create.side_effect = Exception("DB down")
+
+        # Must not raise — persistence is best-effort.
+        results = check_all_services(persist=True)
+        assert all(r.status == "up" for r in results)
+
+    @patch("monitoring.services.checker.HealthCheck.objects.bulk_create")
+    @patch("monitoring.services.checker.check_service")
+    def test_error_results_are_not_persisted(
+        self, mock_check_service, mock_bulk_create
+    ):
+        """Inconclusive ('error') results are never written to the DB."""
+        from monitoring.services.checker import check_all_services
+
+        mock_check_service.side_effect = Exception("monitor blew up")
+
+        check_all_services(persist=True)
+
+        # All results were 'error', so there is nothing conclusive to persist.
+        mock_bulk_create.assert_not_called()
 
 
 class TestAsyncTwoPhaseCheck:

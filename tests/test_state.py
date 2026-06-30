@@ -308,6 +308,84 @@ class TestStateTransitionsWithThreshold:
         assert tracker.get_state("brand-new-service") == "down"
 
 
+class TestInconclusiveResults:
+    """An 'error' result is monitor-side and must not affect service state."""
+
+    @patch("monitoring.services.state.settings")
+    def test_error_result_does_not_count_as_failure(self, mock_settings):
+        """An 'error' is ignored: it neither advances nor resets the streak.
+
+        One genuine failure followed by a monitor-side error must NOT confirm
+        an outage (the error contributes nothing). Only real failures count.
+        """
+        from monitoring.services.state import StateTracker
+
+        mock_settings.MONITORED_SERVICES = THRESHOLD_2_SERVICES
+        mock_settings.ALERT_AFTER_CONSECUTIVE_FAILURES = 2
+
+        HealthCheckFactory(service_name="test-service", status="up")
+
+        tracker = StateTracker()
+        tracker.initialize()
+
+        # One real failure (count = 1), then a monitor-side error.
+        t1, _ = tracker.update_and_get_transition(
+            _make_result("test-service", "down")
+        )
+        t_err, _ = tracker.update_and_get_transition(
+            _make_result("test-service", "error")
+        )
+
+        assert t1 is None
+        assert t_err is None  # error alone never confirms an outage
+        assert tracker.get_state("test-service") == "up"
+
+    @patch("monitoring.services.state.settings")
+    def test_error_does_not_reset_genuine_failure_streak(self, mock_settings):
+        """Two genuine failures still confirm even if an error lands between them."""
+        from monitoring.services.state import StateTracker
+
+        mock_settings.MONITORED_SERVICES = THRESHOLD_2_SERVICES
+        mock_settings.ALERT_AFTER_CONSECUTIVE_FAILURES = 2
+
+        HealthCheckFactory(service_name="test-service", status="up")
+
+        tracker = StateTracker()
+        tracker.initialize()
+
+        tracker.update_and_get_transition(_make_result("test-service", "down"))
+        tracker.update_and_get_transition(_make_result("test-service", "error"))
+        t2, _ = tracker.update_and_get_transition(
+            _make_result("test-service", "down")
+        )
+
+        # The service genuinely failed twice; the intervening monitor error
+        # is ignored, so the real outage is still confirmed.
+        assert t2 == "went_down"
+
+    @patch("monitoring.services.state.settings")
+    def test_error_result_does_not_trigger_recovery(self, mock_settings):
+        """An 'error' while confirmed-down must not be read as a recovery."""
+        from monitoring.services.state import StateTracker
+
+        mock_settings.MONITORED_SERVICES = THRESHOLD_2_SERVICES
+        mock_settings.ALERT_AFTER_CONSECUTIVE_FAILURES = 2
+
+        HealthCheckFactory(service_name="test-service", status="up")
+        tracker = StateTracker()
+        tracker.initialize()
+
+        tracker.update_and_get_transition(_make_result("test-service", "down"))
+        tracker.update_and_get_transition(_make_result("test-service", "down"))
+        assert tracker.get_state("test-service") == "down"
+
+        t, _ = tracker.update_and_get_transition(
+            _make_result("test-service", "error")
+        )
+        assert t is None
+        assert tracker.get_state("test-service") == "down"  # still down
+
+
 class TestExternalOutageResolution:
     """Tests for reconciling outages resolved out-of-band (e.g. from admin)."""
 

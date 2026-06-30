@@ -9,6 +9,7 @@ import logging
 from datetime import timedelta
 
 from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.executors.pool import ThreadPoolExecutor as APSThreadPoolExecutor
 from apscheduler.triggers.interval import IntervalTrigger
 from apscheduler.triggers.cron import CronTrigger
 from django.conf import settings
@@ -97,7 +98,14 @@ def get_scheduler() -> BackgroundScheduler:
     """Get or create the global scheduler instance."""
     global _scheduler
     if _scheduler is None:
-        _scheduler = BackgroundScheduler()
+        # Pin a small thread pool. Only two jobs run here (the per-minute
+        # health check and the daily cleanup), and each thread holds its own
+        # persistent Django DB connection. A narrow pool keeps the monitor's
+        # database connection count low and predictable. The parallelism of
+        # the checks themselves lives inside check_all_services, not here.
+        _scheduler = BackgroundScheduler(
+            executors={"default": APSThreadPoolExecutor(max_workers=2)}
+        )
     return _scheduler
 
 

@@ -220,6 +220,18 @@ class StateTracker:
         service_name = result.service_name
         new_status = result.status
 
+        # Inconclusive result: the monitor itself couldn't complete the
+        # check (e.g. its own DB was unreachable, or a worker crashed). This
+        # says nothing about the target service, so we preserve the existing
+        # state and do NOT count it as a failure or a success. This is what
+        # prevents a monitor-side hiccup from flapping every service down.
+        if new_status not in ("up", "down"):
+            logger.warning(
+                f"Inconclusive check for {service_name} (status={new_status}): "
+                f"{result.error_message}; preserving prior state"
+            )
+            return None, None
+
         # If this outage was closed out-of-band (e.g. an operator resolved
         # it from the admin), drop our stale in-memory "down" state before
         # evaluating this result.

@@ -23,10 +23,22 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class HealthCheckResult:
-    """Result of a health check."""
+    """Result of a health check.
+
+    ``status`` is one of:
+
+    - ``"up"``    — the target service answered correctly.
+    - ``"down"``  — the target service answered incorrectly or was
+      unreachable. This is a real, reportable outage.
+    - ``"error"`` — the *monitor itself* could not complete the check
+      (e.g. its own database was unreachable, or a worker crashed). This
+      is **inconclusive**: it says nothing about the target service, so it
+      is never persisted, never counted toward the failure threshold, and
+      never alerted on. See :func:`check_all_services`.
+    """
 
     service_name: str
-    status: str  # "up" or "down"
+    status: str  # "up", "down", or "error"
     response_time_ms: int | None
     status_code: int | None
     error_message: str
@@ -35,6 +47,15 @@ class HealthCheckResult:
     def is_up(self) -> bool:
         """Returns True if the service is up."""
         return self.status == "up"
+
+    @property
+    def is_conclusive(self) -> bool:
+        """True if this result reflects the target service (up or down).
+
+        ``"error"`` results are monitor-side failures and are not
+        conclusive about the monitored service.
+        """
+        return self.status in ("up", "down")
 
 
 def _make_request(
@@ -431,42 +452,83 @@ def _check_with_retry(
     )
 
 
-def _persist_result(result: HealthCheckResult) -> HealthCheck:
-    """Save health check result to database."""
-    return HealthCheck.objects.create(
-        service_name=result.service_name,
-        status=result.status,
-        response_time_ms=result.response_time_ms,
-        status_code=result.status_code,
-        error_message=result.error_message,
-        checked_at=timezone.now(),
-    )
-
-
-def _check_service_worker(
-    config: dict[str, Any], persist: bool
-) -> HealthCheckResult:
+def _persist_result(result: HealthCheckResult) -> HealthCheck | None:
     """
-    Worker function for parallel health checks.
+    Save a single health check result to the database.
 
-    Ensures Django DB connections are properly managed in worker threads.
+    Persistence is best-effort: a failure to write to the monitor's own
+    database must never propagate, because that would let a monitor-side
+    problem masquerade as a monitored-service outage. Returns the created
+    row, or ``None`` if the result was inconclusive or the write failed.
     """
-    from django.db import close_old_connections
-
-    close_old_connections()
+    if not result.is_conclusive:
+        return None
     try:
-        return check_service(config, persist=persist)
-    finally:
-        close_old_connections()
+        return HealthCheck.objects.create(
+            service_name=result.service_name,
+            status=result.status,
+            response_time_ms=result.response_time_ms,
+            status_code=result.status_code,
+            error_message=result.error_message,
+            checked_at=timezone.now(),
+        )
+    except Exception:
+        logger.exception(
+            "Failed to persist health check for %s (monitor DB issue); "
+            "result is not lost, just not recorded",
+            result.service_name,
+        )
+        return None
+
+
+def _persist_results(results: list[HealthCheckResult]) -> None:
+    """
+    Persist a cycle's worth of results in one bulk write, best-effort.
+
+    Runs in the *calling* thread (the scheduler thread), not in the
+    per-check worker threads — so worker threads never touch the database.
+    Inconclusive (``"error"``) results are skipped. A DB failure is logged
+    and swallowed; it never turns into a false outage.
+    """
+    now = timezone.now()
+    rows = [
+        HealthCheck(
+            service_name=r.service_name,
+            status=r.status,
+            response_time_ms=r.response_time_ms,
+            status_code=r.status_code,
+            error_message=r.error_message,
+            checked_at=now,
+        )
+        for r in results
+        if r is not None and r.is_conclusive
+    ]
+    if not rows:
+        return
+    try:
+        HealthCheck.objects.bulk_create(rows)
+    except Exception:
+        logger.exception(
+            "Failed to persist %d health check result(s) (monitor DB issue)",
+            len(rows),
+        )
 
 
 def check_all_services(persist: bool = True) -> list[HealthCheckResult]:
     """
     Check health of all configured services in parallel.
 
-    Uses ThreadPoolExecutor so a single slow/down service doesn't
-    block the entire check cycle. Each thread gets its own httpx
-    client and Django DB connection.
+    Uses a ThreadPoolExecutor so a single slow/down service doesn't block
+    the cycle. **Worker threads perform pure HTTP checks and never touch
+    the database** — persistence happens once, in this (calling) thread,
+    as a single bulk write. This avoids leaking a DB connection per worker
+    thread each cycle (the root cause of "too many clients" errors) and
+    keeps a monitor-side DB hiccup from ever being reported as a service
+    outage.
+
+    Any unexpected exception from a worker yields an ``"error"`` result
+    (inconclusive), never a ``"down"`` — a crash in the monitor is not a
+    Sefaria outage.
 
     Returns:
         List of HealthCheckResult for each service
@@ -481,7 +543,8 @@ def check_all_services(persist: bool = True) -> list[HealthCheckResult]:
 
     with ThreadPoolExecutor(max_workers=len(services)) as executor:
         future_to_index = {
-            executor.submit(_check_service_worker, config, persist): i
+            # persist=False: never write to the DB from a worker thread.
+            executor.submit(check_service, config, persist=False): i
             for i, config in enumerate(services)
         }
 
@@ -490,15 +553,22 @@ def check_all_services(persist: bool = True) -> list[HealthCheckResult]:
             try:
                 results[idx] = future.result()
             except Exception as e:
-                # If a worker raises unexpectedly, record it as down
+                # A worker should never raise — every check path returns a
+                # result — so this is a monitor-side fault, not a service
+                # outage. Record it as inconclusive ("error"), not "down".
                 service_name = services[idx].get("name", f"service-{idx}")
-                logger.exception(f"Unexpected error in parallel check for {service_name}")
+                logger.exception(
+                    f"Unexpected error in parallel check for {service_name}"
+                )
                 results[idx] = HealthCheckResult(
                     service_name=service_name,
-                    status="down",
+                    status="error",
                     response_time_ms=None,
                     status_code=None,
-                    error_message=f"Worker error: {e}",
+                    error_message=f"Monitor error: {e}",
                 )
+
+    if persist:
+        _persist_results(results)
 
     return results
