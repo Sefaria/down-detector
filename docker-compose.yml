@@ -35,9 +35,9 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    command: >
-      sh -c "python manage.py migrate --noinput &&
-             gunicorn --bind 0.0.0.0:8000 --workers 2 --threads 2 config.wsgi:application"
+    # Release steps (migrate, collectstatic, deploy checks) then gunicorn.
+    # The web container is the single migrator; see scripts/web-entrypoint.sh.
+    command: sh scripts/web-entrypoint.sh
 
   # Health Check Scheduler (Background Service)
   scheduler:
@@ -54,11 +54,17 @@ services:
       - SLACK_CHANNEL=${SLACK_CHANNEL:-sefaria-down}
       - STATUS_PAGE_URL=${STATUS_PAGE_URL:-https://status.sefaria.org}
       - HEALTH_CHECK_INTERVAL=${HEALTH_CHECK_INTERVAL:-60}
+    # Wait until web is healthy — that means migrations have been applied and
+    # the schema is ready — before the scheduler touches the database.
     depends_on:
       db:
         condition: service_healthy
       web:
-        condition: service_started
+        condition: service_healthy
+    # This container is not an HTTP server, so the image's HTTP healthcheck
+    # (inherited from the Dockerfile) would always report unhealthy. Disable it.
+    healthcheck:
+      disable: true
     command: python manage.py run_checks
 
   # Retention Cleanup (Runs daily via cron-like schedule)
@@ -74,6 +80,9 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    # One-shot maintenance task, not an HTTP server: disable inherited healthcheck.
+    healthcheck:
+      disable: true
     command: python manage.py cleanup_old_checks
     profiles:
       - maintenance

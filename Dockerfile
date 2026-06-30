@@ -60,5 +60,7 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/ || exit 1
 
-# Default command - run gunicorn
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "2", "--threads", "2", "config.wsgi:application"]
+# Default command - release steps (migrate, collectstatic, deploy checks)
+# then gunicorn. See scripts/web-entrypoint.sh. The scheduler and cleanup
+# containers override this command with their own.
+CMD ["sh", "scripts/web-entrypoint.sh"]
