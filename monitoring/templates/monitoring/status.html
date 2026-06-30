@@ -59,13 +59,9 @@
     <link rel="icon" id="favicon" type="image/x-icon" href="{% static 'icons/favicon.ico' %}">
     <link rel="apple-touch-icon" href="{% static 'icons/apple-touch-icon.png' %}">
 
-    <!-- Fonts: Sefaria uses Roboto (UI) + Adobe Garamond (serif). Crimson Text
-         is Sefaria's own Garamond fallback; system fonts back it up so the
-         page never blocks on the network. -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet"
-        href="https://fonts.googleapis.com/css2?family=Crimson+Text:ital,wght@0,400;0,600;1,400&family=Roboto:wght@400;500;700&display=swap">
+    <!-- Fonts (Roboto UI + Crimson Text serif) are self-hosted via @font-face
+         in style.css — no third-party request, no visitor-IP leak. System
+         fonts back them up so the page never blocks on the network. -->
 
     <!-- Feed discovery -->
     <link rel="alternate" type="application/rss+xml" title="Sefaria Status — Incidents (RSS)"

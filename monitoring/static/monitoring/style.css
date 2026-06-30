@@ -6,6 +6,54 @@
  * line. Colors and type are taken from Sefaria's open-source frontend.
  */
 
+/* Self-hosted fonts (latin subset, woff2). Served same-origin via WhiteNoise
+ * — no third-party request, so the status page never depends on Google Fonts'
+ * availability and leaks no visitor IPs. Roboto is Apache-2.0, Crimson Text is
+ * OFL. Hebrew has no glyphs in these and falls back to a system serif (as
+ * before). url()s are rewritten to hashed names by collectstatic. */
+@font-face {
+    font-family: "Roboto";
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url("../fonts/roboto-v51-latin-regular.woff2") format("woff2");
+}
+@font-face {
+    font-family: "Roboto";
+    font-style: normal;
+    font-weight: 500;
+    font-display: swap;
+    src: url("../fonts/roboto-v51-latin-500.woff2") format("woff2");
+}
+@font-face {
+    font-family: "Roboto";
+    font-style: normal;
+    font-weight: 700;
+    font-display: swap;
+    src: url("../fonts/roboto-v51-latin-700.woff2") format("woff2");
+}
+@font-face {
+    font-family: "Crimson Text";
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url("../fonts/crimson-text-v19-latin-regular.woff2") format("woff2");
+}
+@font-face {
+    font-family: "Crimson Text";
+    font-style: normal;
+    font-weight: 600;
+    font-display: swap;
+    src: url("../fonts/crimson-text-v19-latin-600.woff2") format("woff2");
+}
+@font-face {
+    font-family: "Crimson Text";
+    font-style: italic;
+    font-weight: 400;
+    font-display: swap;
+    src: url("../fonts/crimson-text-v19-latin-italic.woff2") format("woff2");
+}
+
 :root {
     /* Brand */
     --sefaria-blue: #18345D;
