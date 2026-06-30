@@ -21,6 +21,10 @@ PASSWORD_HASHERS = [
 # Disable Slack in tests
 SLACK_WEBHOOK_URL = ""
 
+# Disable axes (lockout backend/middleware/signals) in tests — the test
+# client logs in many times and shouldn't trip brute-force protection.
+AXES_ENABLED = False
+
 # Shorter intervals for tests
 HEALTH_CHECK_INTERVAL = 1
 HEALTH_CHECK_RETRIES = 2

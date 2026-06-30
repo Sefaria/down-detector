@@ -3,12 +3,47 @@ Django Admin configuration for monitoring models.
 """
 import logging
 
+from django import forms
 from django.conf import settings
 from django.contrib import admin
 from django.utils import timezone
 from django.utils.html import format_html
 
 from .models import HealthCheck, Outage, Message, Maintenance
+
+
+def _monitored_service_names() -> list[str]:
+    return [s["name"] for s in getattr(settings, "MONITORED_SERVICES", [])]
+
+
+class MaintenanceAdminForm(forms.ModelForm):
+    """Pick affected services from checkboxes so they can't be mistyped.
+
+    The model stores ``affected_services`` as a comma-separated string; this
+    form presents the configured services as checkboxes and (de)serializes to
+    that string. Selecting none means "all services".
+    """
+
+    affected_services = forms.MultipleChoiceField(
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+        help_text="Select the services this covers. Select none to cover all services.",
+    )
+
+    class Meta:
+        model = Maintenance
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["affected_services"].choices = [
+            (name, name) for name in _monitored_service_names()
+        ]
+        if self.instance and self.instance.pk:
+            self.initial["affected_services"] = self.instance.affected_list
+
+    def clean_affected_services(self):
+        return ", ".join(self.cleaned_data["affected_services"])
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +54,8 @@ admin.site.index_title = (
     "Monitoring data. Health checks and outages are recorded automatically; "
     "incident messages and maintenance windows are authored here."
 )
+# Landing page shows a live system-status dashboard above the model list.
+admin.site.index_template = "admin/monitoring_index.html"
 
 
 @admin.register(HealthCheck)
@@ -182,10 +219,12 @@ class OutageAdmin(admin.ModelAdmin):
 class MaintenanceAdmin(admin.ModelAdmin):
     """Admin for operator-scheduled maintenance windows."""
 
+    form = MaintenanceAdminForm
+
     list_display = [
         "title",
         "state",
-        "affected_services",
+        "scope",
         "start_time",
         "end_time",
         "active",
@@ -195,7 +234,6 @@ class MaintenanceAdmin(admin.ModelAdmin):
     date_hierarchy = "start_time"
     ordering = ["-start_time"]
     list_editable = ["active"]
-    readonly_fields = ["available_services"]
 
     fieldsets = (
         (None, {
@@ -203,12 +241,8 @@ class MaintenanceAdmin(admin.ModelAdmin):
             "description": "Shown on the public status page while the window is current or upcoming.",
         }),
         ("Scope", {
-            "fields": ("affected_services", "available_services"),
-            "description": (
-                "Which services this covers — comma-separated, matching the names "
-                "below exactly. Leave blank to cover every monitored service. "
-                "Unknown names are rejected on save."
-            ),
+            "fields": ("affected_services",),
+            "description": "Which services this covers. Select none to cover every monitored service.",
         }),
         ("Schedule", {
             "fields": ("start_time", "end_time", "active"),
@@ -221,11 +255,10 @@ class MaintenanceAdmin(admin.ModelAdmin):
         }),
     )
 
-    @admin.display(description="Available service names")
-    def available_services(self, obj=None):
-        """List the exact, valid service names operators can put in scope."""
-        names = [s["name"] for s in getattr(settings, "MONITORED_SERVICES", [])]
-        return ", ".join(names) or "(none configured)"
+    @admin.display(description="Scope")
+    def scope(self, obj):
+        """Affected services, or 'All services' when none are named."""
+        return ", ".join(obj.affected_list) or "All services"
 
     @admin.display(description="State")
     def state(self, obj):

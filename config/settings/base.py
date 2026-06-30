@@ -34,6 +34,8 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    # Third-party
+    "axes",  # admin login lockout / brute-force protection
     # Local apps
     "monitoring",
 ]
@@ -47,6 +49,15 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    # AxesMiddleware must be last so it can render lockout responses.
+    "axes.middleware.AxesMiddleware",
+]
+
+# Authentication backends — AxesStandaloneBackend first so it can block
+# locked-out logins before the normal ModelBackend runs.
+AUTHENTICATION_BACKENDS = [
+    "axes.backends.AxesStandaloneBackend",
+    "django.contrib.auth.backends.ModelBackend",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -187,3 +198,21 @@ STATUS_PAGE_URL = env("STATUS_PAGE_URL", default="https://status.sefaria.org")
 
 # Data retention (days)
 HEALTH_CHECK_RETENTION_DAYS = env.int("HEALTH_CHECK_RETENTION_DAYS", default=60)
+
+# =============================================================================
+# Admin login protection (django-axes)
+# =============================================================================
+# Lock an account after this many failed admin logins, then cool off.
+AXES_FAILURE_LIMIT = env.int("AXES_FAILURE_LIMIT", default=5)
+AXES_COOLOFF_TIME = env.int("AXES_COOLOFF_HOURS", default=1)  # hours
+# Lock by username (not IP): behind a reverse proxy every request shares the
+# proxy's IP, so IP-based lockout would be unreliable. A successful login
+# clears the user's failure count. Reset manually with `manage.py axes_reset`.
+AXES_LOCKOUT_PARAMETERS = ["username"]
+AXES_RESET_ON_SUCCESS = True
+
+# Silence axes.W006 (it recommends adding 'ip_address'). We deliberately lock
+# by username only: behind the reverse proxy a client IP isn't reliable, and
+# IP-based lockout could lock out everyone at once. Username-only is also
+# immune to the User-Agent/Cookie rotation bypass W006 warns about.
+SILENCED_SYSTEM_CHECKS = ["axes.W006"]

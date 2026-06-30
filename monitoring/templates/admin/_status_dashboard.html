@@ -1,0 +1,38 @@
+{% comment %}Live system snapshot for the admin landing page.{% endcomment %}
+<div class="module" style="margin-bottom:20px;">
+  <h2 style="display:flex;align-items:center;gap:10px;">
+    System status
+    <span style="font-weight:600;
+      color:{% if overall_status == 'operational' %}#2F7A52{% elif overall_status == 'major' %}#9B3144{% elif overall_status == 'partial' %}#9B3144{% elif overall_status == 'maintenance' %}#2D5483{% else %}#876716{% endif %};">
+      {{ status_label }}
+    </span>
+  </h2>
+  <table style="width:100%;">
+    <thead>
+      <tr><th>Service</th><th>Status</th><th>Response</th></tr>
+    </thead>
+    <tbody>
+      {% for s in services %}
+      <tr>
+        <td>{{ s.name }}</td>
+        <td>
+          <b style="color:{% if s.status == 'up' %}#2F7A52{% elif s.status == 'down' %}#9B3144{% elif s.status == 'maintenance' %}#2D5483{% elif s.status == 'degraded' %}#876716{% else %}#666664{% endif %};">
+            {{ s.status|upper }}
+          </b>
+        </td>
+        <td>{% if s.response_time_ms %}{{ s.response_time_ms }} ms{% else %}—{% endif %}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="3">No services reporting yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p style="margin-top:10px;">
+    Open outages: <b>{{ open_outages }}</b> &nbsp;·&nbsp;
+    Active incidents: <b>{{ active_incidents }}</b> &nbsp;·&nbsp;
+    Maintenance in progress: <b>{{ maintenance_now|length }}</b>
+    {% if maintenance_now %}
+      ({% for m in maintenance_now %}{{ m.title }}{% if not forloop.last %}, {% endif %}{% endfor %})
+    {% endif %}
+  </p>
+</div>

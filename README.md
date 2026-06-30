@@ -275,11 +275,15 @@ python manage.py createsuperuser          # local
 docker compose exec web python manage.py createsuperuser
 ```
 
-From there operators post incident `Message`s, schedule `Maintenance` windows, force-resolve stuck `Outage`s, and read the raw `HealthCheck` history. Each screen carries inline help describing what it does.
+From there operators post incident `Message`s, schedule `Maintenance` windows, force-resolve stuck `Outage`s, and read the raw `HealthCheck` history. Each screen carries inline help describing what it does. The admin **landing page shows a live dashboard** — overall status, each service's current state and response time, and counts of open outages / active incidents / in-progress maintenance — so you see the system the moment you log in. Maintenance scope is chosen from **checkboxes of the configured services** (no free-typed names to mistype), and a window with an end before its start is rejected.
+
+**Least-privilege staff.** A predefined **`Operators`** group (created by migration) grants exactly the rights to manage incidents and maintenance, force-resolve outages, and read health checks — but **not** to delete records or manage users. Add staff to this group (in the admin: Users → select user → add to *Operators*) and mark them `is_staff` rather than making them superusers.
+
+**Brute-force protection.** Admin logins are protected by [`django-axes`](https://django-axes.readthedocs.io/): after `AXES_FAILURE_LIMIT` failed attempts (default 5) a username is locked for `AXES_COOLOFF_HOURS` (default 1h); a successful login clears the count. Lockout is keyed on **username** (not IP, which is unreliable behind the proxy). Clear a lockout manually with `python manage.py axes_reset` (or `axes_reset_username <name>`).
 
 **Is it safe to leave `/admin/` publicly reachable?** Yes, with the defaults this project ships — but understand the trade-off:
 
-- It is gated by Django authentication (login required), and production enables HTTPS, secure + `HttpOnly` session/CSRF cookies, HSTS, `X-Frame-Options: DENY`, and content-type/XSS protections (see [`config/settings/production.py`](config/settings/production.py)).
+- It is gated by Django authentication (login required) **plus `django-axes` login lockout**, and production enables HTTPS, secure + `HttpOnly` session/CSRF cookies, HSTS, `X-Frame-Options: DENY`, and content-type/XSS protections (see [`config/settings/production.py`](config/settings/production.py)).
 - The blast radius is small: the admin only edits incident/maintenance content and reads monitoring data. It **cannot** change what is monitored or any thresholds — those live in [`config/settings/base.py`](config/settings/base.py) and ship with the image.
 - The main risk of a public, default-path admin is automated credential-stuffing/bot noise against the login page. Mitigate by: using a **strong, unique superuser password** and few accounts; optionally restricting `/admin/` by IP or basic-auth at the Coolify/Traefik proxy, moving it off the default path, or adding 2FA (`django-otp`) / login rate-limiting if you want defense in depth.
 
@@ -310,7 +314,7 @@ docker compose logs -f scheduler
 
 ## Testing
 
-128 tests cover the checker, state machine, alerter, scheduler, models, admin, cleanup, views, uptime history, response-time sparklines, degraded states, maintenance windows, incident feeds, and SEO.
+140 tests cover the checker, state machine, alerter, scheduler, models, admin (incl. the dashboard, Operators group, and maintenance validation), cleanup, views, uptime history, response-time sparklines, degraded states, maintenance windows, incident feeds, and SEO.
 
 ```bash
 # All tests (uses config.settings.test via pytest.ini)
@@ -342,10 +346,12 @@ monitoring/
   management/commands/
     run_checks.py        scheduler entrypoint
     cleanup_old_checks.py
-  templates/ static/ migrations/
+  templatetags/
+    monitoring_admin.py  admin landing-dashboard inclusion tag
+  templates/ static/ migrations/   (incl. admin dashboard templates, Operators group migration)
 scripts/
   web-entrypoint.sh  release flow for the web container (migrate, collectstatic, gunicorn)
-tests/               130 tests + factories + fixtures
+tests/               140 tests + factories + fixtures
 Dockerfile  docker-compose.yml  requirements.txt  .env.example  .gitattributes
 ```
 

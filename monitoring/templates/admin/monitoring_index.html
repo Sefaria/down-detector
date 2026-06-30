@@ -1,0 +1,11 @@
+{% extends "admin/index.html" %}
+{% comment %}
+Admin landing page with a live status dashboard prepended above the normal
+app/model list. Wired via admin.site.index_template in monitoring/admin.py.
+{% endcomment %}
+{% load monitoring_admin %}
+
+{% block content %}
+  {% status_dashboard %}
+  {{ block.super }}
+{% endblock %}
