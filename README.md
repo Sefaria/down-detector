@@ -272,9 +272,16 @@ To post an incident: log into `/admin/`, add a `Message` (severity high/medium),
 The operator console is the standard Django admin at **`/admin/`** — i.e. `https://status.sefaria.org/admin/` in production, or `http://localhost:8000/admin/` locally. Log in with a Django **superuser**, created with:
 
 ```bash
-python manage.py createsuperuser          # local
-# in production, run inside the web container, e.g.:
-docker compose exec web python manage.py createsuperuser
+# Local
+python manage.py createsuperuser
+
+# Production on Coolify: open the web service's terminal
+# (Coolify → your app → the "web" resource → Terminal / "Execute Command"), then:
+python manage.py createsuperuser
+#   • locked out by the login throttle? run:  python manage.py axes_reset
+#
+# Plain Docker host (no Coolify) equivalent:
+#   docker compose exec web python manage.py createsuperuser
 ```
 
 From there operators post incident `Message`s, schedule `Maintenance` windows, force-resolve stuck `Outage`s, and read the raw `HealthCheck` history. Each screen carries inline help describing what it does. The admin **landing page shows a live dashboard** — overall status, each service's current state and response time, and counts of open outages / active incidents / in-progress maintenance — so you see the system the moment you log in. Maintenance scope is chosen from **checkboxes of the configured services** (no free-typed names to mistype), and a window with an end before its start is rejected.
@@ -320,9 +327,9 @@ docker compose logs -f scheduler
 
 `docker-compose.override.yml` (git-ignored) adds local port mapping and a source mount; in production Coolify routes traffic to the `web` service, so no published ports are needed.
 
-### Edge caching (CDN)
+### Caching (no CDN required)
 
-A status page is hit hardest during an outage — exactly when the origin is most fragile — so it should be cacheable at the edge. The app emits CDN-friendly headers:
+**You don't need to configure anything for caching, and you don't need Cloudflare or any external service.** The app already caches its read endpoints server-side (`cache_page`), so even with no CDN the database only sees ~one query per service per cache window no matter how many people are watching. The responses also carry CDN-friendly headers (no `Set-Cookie`/`Vary: Cookie`):
 
 | Path | `Cache-Control` |
 |---|---|
@@ -330,7 +337,7 @@ A status page is hit hardest during an outage — exactly when the origin is mos
 | `/api/status/` (the JSON the page polls every 20s) | `public, max-age=10, s-maxage=10, stale-while-revalidate=30` |
 | `/healthz`, `/admin/` | `no-store` (never cached) |
 
-These responses carry no `Set-Cookie`/`Vary: Cookie`, so a shared cache can serve one copy to everyone. Coolify's Traefik does **not** cache HTML/JSON by default, so to actually get edge caching put **Cloudflare** in front (proxied DNS) and add a Cache Rule for `/` and `/api/status/` set to *Eligible for cache* / respect origin TTL (Edge TTL ≈ the `s-maxage`). The browser polls with `cache: no-store` (so it never shows a stale local copy), but that only affects the *browser* — requests still reach the edge and are served from its cache. Net effect: the origin and Postgres see roughly one request per cache window no matter how many thousands are watching.
+**Optional — only if you ever want edge caching for big traffic spikes:** Coolify's Traefik doesn't cache HTML/JSON, so this requires a CDN in front (e.g. Cloudflare with a Cache Rule for `/` and `/api/status/` set to *respect origin TTL*). If you go that route, **never set a long fixed edge TTL on `/api/status/`** — it would freeze the live data and "last checked" would stick at minutes. If you're not using a CDN (the default), there's nothing to do here.
 
 ## Testing
 
@@ -379,6 +386,9 @@ Dockerfile  docker-compose.yml  requirements.txt  .env.example  .gitattributes
 
 - **A service is red but I think it's fine** — Check the scheduler logs (`docker compose logs scheduler`). The page only goes red after `failure_threshold` consecutive failures; confirm the health endpoint really returns the expected status.
 - **No Slack alerts** — Verify `SLACK_WEBHOOK_URL` is set in the `scheduler` service's environment; an empty value logs "skipping alert" and sends nothing.
+- **Create an admin login** — In Coolify, open the `web` service terminal and run `python manage.py createsuperuser`.
+- **Locked out of `/admin/`** — Too many failed logins triggers the `django-axes` lockout (default 5 attempts / 1h). Clear it from the `web` terminal: `python manage.py axes_reset` (or `axes_reset_username <name>`).
+- **"Last checked" shows ~1m** — Normal: the scheduler checks every `HEALTH_CHECK_INTERVAL` (60s), so the value climbs toward a minute and resets each cycle. Set `HEALTH_CHECK_INTERVAL=30` for a fresher feel (and consider raising the MCP/Chatbot `failure_threshold` to keep the same wall-clock tolerance). Only worrying if it climbs to *several* minutes — then check the scheduler is running.
 - **Post an incident banner** — `/admin/` → Incident Messages → add (severity `high` contributes "Major Outage", `medium` contributes "Degraded Performance").
 - **Schedule maintenance** — `/admin/` → Maintenance Windows → add (set affected services and a start/end). During the window those services show "Under Maintenance" and their Slack alerts are suppressed; uncheck *active* to cancel.
 - **Tune the "degraded" threshold** — A service shows "Degraded" when its latest response time exceeds `DEGRADED_RESPONSE_MS` (global) or its per-service `degraded_threshold_ms`. This is page-only and never pages Slack.
