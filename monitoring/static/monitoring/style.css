@@ -1,5 +1,20 @@
 /* Sefaria Status Page Styles */
 
+/* Accessibility: honor reduced-motion preferences. Status is also conveyed
+   by text labels, so the pulsing dots are decorative and safe to disable. */
+@media (prefers-reduced-motion: reduce) {
+
+    .status-dot.pulse,
+    .service-dot.status-down {
+        animation: none;
+    }
+
+    * {
+        transition: none !important;
+        scroll-behavior: auto !important;
+    }
+}
+
 :root {
     /* Sefaria Brand Colors */
     --sefaria-blue: #18345D;

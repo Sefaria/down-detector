@@ -68,7 +68,7 @@
                 </a>
                 <h1>Status</h1>
             </div>
-            <p class="subtitle">Real-time service health monitoring</p>
+            <p class="subtitle">Live status of Sefaria's services. This page updates automatically.</p>
         </header>
 
         <!-- Overall Status Banner -->
@@ -135,7 +135,7 @@
                     <div class="uptime-bars">
                         {% for d in svc.days %}
                         <span class="uptime-bar status-{{ d.status }}"
-                            title="{{ d.date }}{% if d.uptime is not None %} — {{ d.uptime }}% uptime{% else %} — no data{% endif %}"></span>
+                            title="{{ d.date }}{% if d.uptime is not None %}: {{ d.uptime }}% uptime{% else %}: no data{% endif %}"></span>
                         {% endfor %}
                     </div>
                 </div>
