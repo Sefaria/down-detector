@@ -1,4 +1,57 @@
-/* Sefaria Status Page Styles */
+/* Sefaria Status Page Styles
+ *
+ * Light, scholarly theme matching Sefaria's real brand: a warm off-white
+ * "page of a book" background, serif headings, a navy header with a gold
+ * accent, gently rounded cards, and the signature category-color accent
+ * line. Colors and type are taken from Sefaria's open-source frontend.
+ */
+
+:root {
+    /* Brand */
+    --sefaria-blue: #18345D;
+    --sefaria-blue-dark: #212E50;
+    --sefaria-gold: #CCB479;
+    --sefaria-link: #4871BF;
+
+    /* Surfaces & text (warm, not stark white/black) */
+    --bg: #FBFBFA;
+    --surface: #FFFFFF;
+    --surface-soft: #F6F6F4;
+    --border: #EDEDEC;
+    --border-strong: #E0E0DE;
+    --text: #333331;
+    --text-muted: #666664;
+    --text-faint: #8A8A87;
+
+    /* Status colors (from Sefaria's category palette), tuned for contrast
+       on a light background. Dot/bar use the vivid hue; *-text is darkened
+       so badge labels meet WCAG contrast. */
+    --status-up: #5D956F;
+    --status-up-text: #2F7A52;
+    --status-degraded: #CCB479;
+    --status-degraded-text: #876716;
+    --status-down: #9B3144;
+    --status-down-text: #802F3E;
+    --status-maint: #4871BF;
+    --status-maint-text: #2D5483;
+    --status-unknown: #B7B7B4;
+    --status-unknown-text: #6B6B69;
+
+    /* The category rainbow Sefaria draws as a thin accent line. */
+    --category-rainbow: linear-gradient(90deg,
+            #00505E, #5698B4, #CCB37C, #5B9370, #823241,
+            #5A4474, #AD4F66, #7285A6, #00807E, #4872B3);
+
+    /* Type — Sefaria uses Adobe Garamond (serif) + Roboto (sans). We load
+       Roboto and Crimson Text (Sefaria's own Garamond fallback) with system
+       fallbacks so the page never blocks on web fonts. */
+    --font-serif: "Crimson Text", Georgia, "Times New Roman", serif;
+    --font-sans: "Roboto", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+
+    --radius: 7px;
+    --shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
 
 /* Accessibility: honor reduced-motion preferences. Status is also conveyed
    by text labels, so the pulsing dots are decorative and safe to disable. */
@@ -15,34 +68,6 @@
     }
 }
 
-:root {
-    /* Sefaria Brand Colors */
-    --sefaria-blue: #18345D;
-    --sefaria-gold: #CCB479;
-    --sefaria-light-blue: #2D4A7C;
-
-    /* Status colors — bespoke tones anchored on the Sefaria palette, not
-       the generic framework defaults. Gold doubles as the "partial" hue. */
-    --status-up: #5AA98C;
-    --status-down: #D1574B;
-    --status-partial: var(--sefaria-gold);
-    --status-unknown: #7C8AA0;
-    --status-resolved: #7C8AA0;
-
-    /* UI colors — a dark theme derived from the brand navy (#18345D)
-       rather than a neutral slate, with a warm off-white for text so it
-       sits well against the gold accents. */
-    --bg-primary: #0c1c33;
-    --bg-secondary: #122742;
-    --bg-card: #1b3354;
-    --text-primary: #F2EFE8;
-    --text-secondary: #9DAFC6;
-    --border-color: #2a4366;
-
-    /* Typography */
-    --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
-}
-
 * {
     margin: 0;
     padding: 0;
@@ -50,23 +75,31 @@
 }
 
 html {
-    background-color: #0c1c33;
-    /* var(--bg-primary) fallback */
-    background-color: var(--bg-primary);
+    background-color: #FBFBFA;
+    background-color: var(--bg);
 }
 
 body {
-    font-family: var(--font-family);
-    background: linear-gradient(135deg, var(--bg-primary) 0%, #15315a 100%) fixed;
-    color: var(--text-primary);
+    font-family: var(--font-sans);
+    background: var(--bg);
+    color: var(--text);
     line-height: 1.6;
     min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* Signature Sefaria touch: a thin category-color accent line at the top. */
+body::before {
+    content: "";
+    display: block;
+    height: 4px;
+    background: var(--category-rainbow);
 }
 
 .container {
-    max-width: 800px;
+    max-width: 820px;
     margin: 0 auto;
-    padding: 2rem 1rem;
+    padding: 2.5rem 1.25rem;
     min-height: 100vh;
     display: flex;
     flex-direction: column;
@@ -83,20 +116,18 @@ header {
     align-items: center;
     justify-content: center;
     gap: 0.75rem;
-    margin-bottom: 0.25rem;
+    margin-bottom: 0.4rem;
 }
 
 .logo-link {
     display: flex;
     align-items: center;
-    margin-bottom: 0;
 }
 
 .logo {
-    height: 40px;
+    height: 38px;
     width: auto;
-    filter: brightness(0) invert(1);
-    opacity: 0.9;
+    opacity: 0.95;
     transition: opacity 0.2s;
 }
 
@@ -105,14 +136,15 @@ header {
 }
 
 header h1 {
-    font-size: 1.75rem;
-    font-weight: 700;
-    margin-bottom: 0.25rem;
-    color: var(--text-primary);
+    font-family: var(--font-serif);
+    font-size: 2rem;
+    font-weight: 600;
+    color: var(--sefaria-blue);
+    letter-spacing: 0.01em;
 }
 
 header .subtitle {
-    color: var(--text-secondary);
+    color: var(--text-muted);
     font-size: 0.95rem;
 }
 
@@ -120,10 +152,31 @@ header .subtitle {
 .overall-status {
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;
-    padding: 1.25rem 1.5rem;
-    border-radius: 12px;
+    gap: 0.85rem;
+    padding: 1.4rem 1.6rem;
+    border-radius: var(--radius);
     margin-bottom: 2rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow);
+    border-left: 4px solid var(--status-unknown);
+}
+
+.overall-status.status-operational {
+    border-left-color: var(--status-up);
+}
+
+.overall-status.status-degraded,
+.overall-status.status-partial {
+    border-left-color: var(--status-degraded);
+}
+
+.overall-status.status-major {
+    border-left-color: var(--status-down);
+}
+
+.overall-status.status-maintenance {
+    border-left-color: var(--status-maint);
 }
 
 .status-row {
@@ -132,29 +185,14 @@ header .subtitle {
     gap: 0.75rem;
 }
 
-.overall-status.status-operational {
-    background: linear-gradient(135deg, rgba(90, 169, 140, 0.12), rgba(90, 169, 140, 0.04));
-    border: 1px solid rgba(90, 169, 140, 0.25);
-}
-
-.overall-status.status-partial {
-    background: linear-gradient(135deg, rgba(204, 180, 121, 0.12), rgba(204, 180, 121, 0.04));
-    border: 1px solid rgba(204, 180, 121, 0.25);
-}
-
-.overall-status.status-major {
-    background: linear-gradient(135deg, rgba(209, 87, 75, 0.12), rgba(209, 87, 75, 0.04));
-    border: 1px solid rgba(209, 87, 75, 0.25);
-}
-
 .status-indicator {
     flex-shrink: 0;
 }
 
 .status-dot {
     display: block;
-    width: 14px;
-    height: 14px;
+    width: 13px;
+    height: 13px;
     border-radius: 50%;
     background: var(--status-up);
 }
@@ -163,12 +201,17 @@ header .subtitle {
     background: var(--status-up);
 }
 
+.status-degraded .status-dot,
 .status-partial .status-dot {
-    background: var(--status-partial);
+    background: var(--status-degraded);
 }
 
 .status-major .status-dot {
     background: var(--status-down);
+}
+
+.status-maintenance .status-dot {
+    background: var(--status-maint);
 }
 
 .status-dot.pulse {
@@ -179,63 +222,77 @@ header .subtitle {
 
     0%,
     100% {
-        box-shadow: 0 0 0 0 rgba(209, 87, 75, 0.5);
+        box-shadow: 0 0 0 0 rgba(155, 49, 68, 0.4);
     }
 
     50% {
-        box-shadow: 0 0 0 8px rgba(209, 87, 75, 0);
+        box-shadow: 0 0 0 7px rgba(155, 49, 68, 0);
     }
 }
 
 .status-text {
-    font-size: 1.15rem;
+    font-family: var(--font-serif);
+    font-size: 1.3rem;
     font-weight: 600;
-    color: var(--text-primary);
+    color: var(--text);
 }
 
 .status-operational .status-text {
-    color: var(--status-up);
+    color: var(--status-up-text);
 }
 
+.status-degraded .status-text,
 .status-partial .status-text {
-    color: var(--status-partial);
+    color: var(--status-degraded-text);
 }
 
 .status-major .status-text {
-    color: var(--status-down);
+    color: var(--status-down-text);
 }
 
+.status-maintenance .status-text {
+    color: var(--status-maint-text);
+}
+
+.last-updated {
+    font-size: 0.8rem;
+    color: var(--text-faint);
+    margin-left: auto;
+}
+
+/* Status-aware verse */
 .status-quote {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 0.3rem;
+    gap: 0.35rem;
     text-align: center;
-    padding: 0.5rem 1rem 0.25rem;
-    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    padding: 0.75rem 1rem 0.25rem;
+    border-top: 1px solid var(--border);
 }
 
 .quote-hebrew {
-    font-size: 1.1rem;
+    font-family: var(--font-serif);
+    font-size: 1.25rem;
     font-weight: 500;
     direction: rtl;
-    color: var(--sefaria-gold);
-    letter-spacing: 0.01em;
-    line-height: 1.5;
+    color: var(--sefaria-blue);
+    line-height: 1.6;
 }
 
 .quote-english {
-    font-size: 0.85rem;
+    font-family: var(--font-serif);
+    font-size: 0.95rem;
     font-style: italic;
-    color: var(--text-secondary);
-    line-height: 1.4;
+    color: var(--text-muted);
+    line-height: 1.5;
 }
 
 .quote-source {
-    color: var(--text-secondary);
+    color: var(--sefaria-link);
     text-decoration: none;
-    font-size: 0.75rem;
-    opacity: 0.6;
+    font-size: 0.78rem;
+    opacity: 0.85;
     transition: opacity 0.15s;
 }
 
@@ -244,40 +301,40 @@ header .subtitle {
     text-decoration: underline;
 }
 
-.last-updated {
-    font-size: 0.8rem;
-    color: var(--text-secondary);
-    margin-left: auto;
+/* Section headings */
+.services h2,
+.uptime h2,
+.incidents h2,
+.maintenance h2 {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    margin-bottom: 0.75rem;
+    color: var(--text-faint);
 }
 
-/* Services Section */
+/* Services */
 .services {
     margin-bottom: 2rem;
 }
 
-.services h2 {
-    font-size: 0.75rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    margin-bottom: 0.75rem;
-    color: var(--text-secondary);
-}
-
 .service-list {
-    background: var(--bg-secondary);
-    border-radius: 12px;
+    background: var(--surface);
+    border-radius: var(--radius);
     overflow: hidden;
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-soft);
 }
 
 .service-item {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 1rem 1.25rem;
-    border-bottom: 1px solid var(--border-color);
+    padding: 1rem 1.3rem;
+    border-bottom: 1px solid var(--border);
     transition: background 0.15s;
+    gap: 1rem;
 }
 
 .service-item:last-child {
@@ -285,13 +342,14 @@ header .subtitle {
 }
 
 .service-item:hover {
-    background: rgba(255, 255, 255, 0.02);
+    background: var(--surface-soft);
 }
 
 .service-info {
     display: flex;
     align-items: center;
     gap: 0.75rem;
+    min-width: 0;
 }
 
 .service-dot {
@@ -299,15 +357,24 @@ header .subtitle {
     height: 10px;
     border-radius: 50%;
     flex-shrink: 0;
+    background: var(--status-unknown);
 }
 
 .service-dot.status-up {
     background: var(--status-up);
 }
 
+.service-dot.status-degraded {
+    background: var(--status-degraded);
+}
+
 .service-dot.status-down {
     background: var(--status-down);
     animation: pulse-small 2s infinite;
+}
+
+.service-dot.status-maintenance {
+    background: var(--status-maint);
 }
 
 .service-dot.status-unknown {
@@ -318,57 +385,70 @@ header .subtitle {
 
     0%,
     100% {
-        box-shadow: 0 0 0 0 rgba(209, 87, 75, 0.4);
+        box-shadow: 0 0 0 0 rgba(155, 49, 68, 0.35);
     }
 
     50% {
-        box-shadow: 0 0 0 6px rgba(209, 87, 75, 0);
+        box-shadow: 0 0 0 6px rgba(155, 49, 68, 0);
     }
 }
 
 .service-name {
     font-weight: 500;
-    font-size: 0.95rem;
+    font-size: 0.98rem;
+    color: var(--text);
 }
 
 .service-status {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
+    gap: 0.85rem;
+    flex-shrink: 0;
 }
 
 .status-badge {
-    padding: 0.2rem 0.6rem;
+    padding: 0.2rem 0.65rem;
     border-radius: 9999px;
     font-size: 0.7rem;
     font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.02em;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
 }
 
 .status-badge.status-up {
-    background: rgba(90, 169, 140, 0.12);
-    color: var(--status-up);
+    background: rgba(93, 149, 111, 0.15);
+    color: var(--status-up-text);
+}
+
+.status-badge.status-degraded {
+    background: rgba(204, 180, 121, 0.25);
+    color: var(--status-degraded-text);
 }
 
 .status-badge.status-down {
-    background: rgba(209, 87, 75, 0.12);
-    color: var(--status-down);
+    background: rgba(155, 49, 68, 0.12);
+    color: var(--status-down-text);
+}
+
+.status-badge.status-maintenance {
+    background: rgba(72, 113, 191, 0.14);
+    color: var(--status-maint-text);
 }
 
 .status-badge.status-unknown {
-    background: rgba(124, 138, 160, 0.12);
-    color: var(--status-unknown);
+    background: rgba(120, 120, 120, 0.1);
+    color: var(--status-unknown-text);
 }
 
 .response-time {
-    color: var(--text-secondary);
+    color: var(--text-muted);
     font-size: 0.8rem;
     font-variant-numeric: tabular-nums;
 }
 
 .error-hint {
-    color: var(--status-down);
+    color: var(--status-down-text);
     cursor: help;
     font-size: 0.85rem;
 }
@@ -378,42 +458,34 @@ header .subtitle {
     margin-bottom: 2rem;
 }
 
-.uptime h2 {
-    font-size: 0.75rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    margin-bottom: 0.75rem;
-    color: var(--text-secondary);
-}
-
 .uptime-window {
     text-transform: none;
     letter-spacing: normal;
     font-weight: 400;
-    opacity: 0.6;
+    opacity: 0.7;
 }
 
 .uptime-list {
-    background: var(--bg-secondary);
-    border-radius: 12px;
-    border: 1px solid var(--border-color);
-    padding: 0.5rem 1.25rem 1rem;
+    background: var(--surface);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-soft);
+    padding: 0.5rem 1.3rem 1rem;
 }
 
 .uptime-row {
-    padding: 0.75rem 0;
+    padding: 0.8rem 0;
 }
 
 .uptime-row + .uptime-row {
-    border-top: 1px solid var(--border-color);
+    border-top: 1px solid var(--border);
 }
 
 .uptime-row-head {
     display: flex;
     justify-content: space-between;
     align-items: baseline;
-    margin-bottom: 0.45rem;
+    margin-bottom: 0.5rem;
 }
 
 .uptime-name {
@@ -422,7 +494,7 @@ header .subtitle {
 }
 
 .uptime-pct {
-    color: var(--text-secondary);
+    color: var(--text-muted);
     font-size: 0.8rem;
     font-variant-numeric: tabular-nums;
 }
@@ -443,7 +515,7 @@ header .subtitle {
 }
 
 .uptime-bar:hover {
-    opacity: 0.65;
+    opacity: 0.6;
 }
 
 .uptime-bar.status-up {
@@ -451,7 +523,7 @@ header .subtitle {
 }
 
 .uptime-bar.status-partial {
-    background: var(--status-partial);
+    background: var(--status-degraded);
 }
 
 .uptime-bar.status-down {
@@ -459,38 +531,43 @@ header .subtitle {
 }
 
 .uptime-bar.status-nodata {
-    background: rgba(124, 138, 160, 0.18);
+    background: var(--border-strong);
 }
 
 .uptime-axis {
     display: flex;
     justify-content: space-between;
     margin-top: 0.6rem;
-    color: var(--text-secondary);
+    color: var(--text-faint);
     font-size: 0.7rem;
-    opacity: 0.7;
 }
 
-/* Incidents */
-.incidents {
+/* Incidents & Maintenance */
+.incidents,
+.maintenance {
     margin-bottom: 2rem;
 }
 
-.incidents h2 {
-    font-size: 0.75rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    margin-bottom: 0.75rem;
-    color: var(--text-secondary);
+.incident {
+    background: var(--surface);
+    border-radius: var(--radius);
+    padding: 1rem 1.3rem;
+    margin-bottom: 0.6rem;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--status-unknown);
+    box-shadow: var(--shadow-soft);
 }
 
-.incident {
-    background: var(--bg-secondary);
-    border-radius: 8px;
-    padding: 1rem 1.25rem;
-    margin-bottom: 0.5rem;
-    border: 1px solid var(--border-color);
+.incident.severity-high {
+    border-left-color: var(--status-down);
+}
+
+.incident.severity-medium {
+    border-left-color: var(--status-degraded);
+}
+
+.incident.severity-resolved {
+    border-left-color: var(--status-up);
 }
 
 .incident-header {
@@ -498,31 +575,33 @@ header .subtitle {
     justify-content: space-between;
     align-items: center;
     margin-bottom: 0.5rem;
+    gap: 1rem;
 }
 
 .severity-badge {
-    padding: 0.2rem 0.5rem;
+    padding: 0.2rem 0.55rem;
     border-radius: 4px;
     font-size: 0.65rem;
-    font-weight: 600;
+    font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.02em;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
 }
 
 .severity-high .severity-badge {
-    background: rgba(209, 87, 75, 0.12);
-    color: var(--status-down);
+    background: rgba(155, 49, 68, 0.12);
+    color: var(--status-down-text);
 }
 
 .severity-medium .severity-badge {
-    background: rgba(204, 180, 121, 0.12);
-    color: var(--status-partial);
+    background: rgba(204, 180, 121, 0.25);
+    color: var(--status-degraded-text);
 }
 
 .severity-resolved .severity-badge,
 .severity-badge.resolved {
-    background: rgba(124, 138, 160, 0.12);
-    color: var(--status-resolved);
+    background: rgba(93, 149, 111, 0.15);
+    color: var(--status-up-text);
 }
 
 .incident-times {
@@ -533,25 +612,24 @@ header .subtitle {
 }
 
 .incident-header time {
-    color: var(--text-secondary);
+    color: var(--text-faint);
     font-size: 0.75rem;
 }
 
 .incident-header .updated-time {
     font-style: italic;
-    opacity: 0.8;
 }
 
 .incident-text {
-    color: var(--text-primary);
-    font-size: 0.9rem;
-    line-height: 1.5;
+    color: var(--text);
+    font-size: 0.92rem;
+    line-height: 1.55;
 }
 
 .no-services {
     padding: 2rem;
     text-align: center;
-    color: var(--text-secondary);
+    color: var(--text-muted);
 }
 
 /* Footer */
@@ -559,6 +637,8 @@ footer {
     margin-top: auto;
     text-align: center;
     padding-top: 2rem;
+    border-top: 1px solid var(--border);
+    margin-top: 2rem;
 }
 
 .footer-links {
@@ -566,52 +646,56 @@ footer {
     justify-content: center;
     align-items: center;
     gap: 0.5rem;
-    margin-bottom: 0.75rem;
+    margin-bottom: 0.6rem;
+    padding-top: 1.5rem;
 }
 
 .footer-links a {
-    color: var(--text-secondary);
+    color: var(--text-muted);
     text-decoration: none;
     font-size: 0.85rem;
     transition: color 0.15s;
 }
 
 .footer-links a:hover {
-    color: var(--sefaria-gold);
+    color: var(--sefaria-link);
 }
 
 .footer-links .divider {
-    color: var(--border-color);
+    color: var(--border-strong);
 }
 
 .copyright {
-    color: var(--text-secondary);
+    color: var(--text-faint);
     font-size: 0.8rem;
-    opacity: 0.7;
 }
 
 /* Responsive */
 @media (max-width: 640px) {
     .container {
-        padding: 1rem;
+        padding: 1.25rem 1rem;
     }
 
     header h1 {
-        font-size: 1.5rem;
+        font-size: 1.6rem;
     }
 
     .overall-status {
-        padding: 1rem;
+        padding: 1.1rem 1.2rem;
     }
 
     .status-text {
-        font-size: 1rem;
+        font-size: 1.1rem;
+    }
+
+    .last-updated {
+        display: none;
     }
 
     .service-item {
         flex-direction: column;
         align-items: flex-start;
-        gap: 0.5rem;
+        gap: 0.6rem;
     }
 
     .service-status {
