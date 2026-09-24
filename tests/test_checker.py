@@ -588,3 +588,72 @@ class TestAsyncTwoPhaseCheck:
         assert result.status == "down"
         assert "Connection error" in result.error_message
 
+
+
+class TestUserAgent:
+    """Every check identifies the monitor with a Sefaria User-Agent."""
+
+    @staticmethod
+    def _recording_client_factory(handler):
+        """Build real httpx clients whose requests go to ``handler``, not the network."""
+        real_client = httpx.Client
+        transport = httpx.MockTransport(handler)
+
+        def factory(**kwargs):
+            return real_client(transport=transport, **kwargs)
+
+        return factory
+
+    def test_standard_check_sends_user_agent(self):
+        """A standard GET check sends the Sefaria User-Agent on the wire."""
+        from monitoring.services.checker import SEFARIA_USER_AGENT, check_service
+
+        seen: list[httpx.Request] = []
+
+        def handler(request):
+            seen.append(request)
+            return httpx.Response(200, stream=httpx.ByteStream(b"ok"))
+
+        config = {
+            "name": "sefaria.org",
+            "url": "https://www.sefaria.org/healthz",
+            "method": "GET",
+            "expected_status": 200,
+        }
+        with patch(
+            "monitoring.services.checker.httpx.Client",
+            side_effect=self._recording_client_factory(handler),
+        ):
+            result = check_service(config, max_retries=1)
+
+        assert result.status == "up"
+        assert SEFARIA_USER_AGENT == "Sefaria/down-detector"
+        assert [r.headers["User-Agent"] for r in seen] == [SEFARIA_USER_AGENT]
+
+    @patch("monitoring.services.checker.time.sleep")
+    def test_two_phase_check_sends_user_agent_on_submit_and_poll(self, mock_sleep):
+        """The Linker check sends the User-Agent on both the POST and the poll."""
+        from monitoring.services.checker import SEFARIA_USER_AGENT, check_service
+
+        seen: list[httpx.Request] = []
+
+        def handler(request):
+            seen.append(request)
+            if request.method == "POST":
+                return httpx.Response(202, json={"task_id": "abc-123"})
+            return httpx.Response(
+                200, json={"state": "SUCCESS", "result": {"body": "Found refs"}}
+            )
+
+        with patch(
+            "monitoring.services.checker.httpx.Client",
+            side_effect=self._recording_client_factory(handler),
+        ):
+            result = check_service(TestAsyncTwoPhaseCheck.LINKER_CONFIG, max_retries=1)
+
+        assert result.status == "up"
+        assert [(r.method, str(r.url)) for r in seen] == [
+            ("POST", "https://www.sefaria.org/api/find-refs"),
+            ("GET", "https://www.sefaria.org/api/async/abc-123"),
+        ]
+        assert all(r.headers["User-Agent"] == SEFARIA_USER_AGENT for r in seen)

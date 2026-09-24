@@ -4,7 +4,7 @@ Real-time uptime monitoring and a public status page for Sefaria's critical serv
 
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://python.org)
 [![Django 5.2](https://img.shields.io/badge/django-5.2-green.svg)](https://djangoproject.com)
-[![Tests](https://img.shields.io/badge/tests-152%20passing-brightgreen.svg)](#testing)
+[![Tests](https://img.shields.io/badge/tests-154%20passing-brightgreen.svg)](#testing)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 A small, self-contained Django application that checks Sefaria's services on a fixed interval, records every result, confirms outages before alerting (to filter out brief blips), posts rich [Slack](https://slack.com) notifications when a service goes down or recovers, and renders a public, SEO-optimized status page.
@@ -57,7 +57,7 @@ The **Linker** uses a two-phase async check (see below) and has a higher thresho
 
 A single check **cycle** runs every `HEALTH_CHECK_INTERVAL` seconds (default 60):
 
-1. **Check** — All services are checked **in parallel** ([`ThreadPoolExecutor`](https://docs.python.org/3/library/concurrent.futures.html)) so one slow/down service never blocks the others. Each request is retried up to `HEALTH_CHECK_RETRIES` times with `HEALTH_CHECK_RETRY_DELAY` seconds between attempts. **Worker threads do pure HTTP and never touch the database** — see *Conclusive vs. inconclusive results* below.
+1. **Check** — All services are checked **in parallel** ([`ThreadPoolExecutor`](https://docs.python.org/3/library/concurrent.futures.html)) so one slow/down service never blocks the others. Each request is retried up to `HEALTH_CHECK_RETRIES` times with `HEALTH_CHECK_RETRY_DELAY` seconds between attempts. Every check request carries `User-Agent: Sefaria/down-detector`, so Sefaria's logs can tell the monitor's traffic apart from outside clients. **Worker threads do pure HTTP and never touch the database** — see *Conclusive vs. inconclusive results* below.
 2. **Persist** — Conclusive results are written to the `HealthCheck` table (status, HTTP code, response time, error) in a single bulk write, in the scheduler thread. Persistence is best-effort: a failure to write to the monitor's own DB is logged and never turned into a fake outage.
 3. **Detect transitions** — A `StateTracker` compares each result against the last known state and decides whether a *reportable* transition occurred.
 4. **Alert** — On a confirmed `went_down` or `recovered` transition, a Slack Block Kit message is sent.
@@ -341,7 +341,7 @@ docker compose logs -f scheduler
 
 ## Testing
 
-152 tests cover the checker, state machine, alerter, scheduler, models, admin (incl. the dashboard, Operators group, and maintenance validation), cleanup, views, uptime history, response-time sparklines, degraded states, maintenance windows, incident feeds, and SEO.
+154 tests cover the checker, state machine, alerter, scheduler, models, admin (incl. the dashboard, Operators group, and maintenance validation), cleanup, views, uptime history, response-time sparklines, degraded states, maintenance windows, incident feeds, and SEO.
 
 ```bash
 # All tests (uses config.settings.test via pytest.ini)
@@ -378,7 +378,7 @@ monitoring/
   templates/ static/ migrations/   (incl. admin dashboard templates, Operators group migration)
 scripts/
   web-entrypoint.sh  release flow for the web container (migrate, collectstatic, gunicorn)
-tests/               152 tests + factories + fixtures
+tests/               154 tests + factories + fixtures
 Dockerfile  docker-compose.yml  requirements.txt  .env.example  .gitattributes
 ```
 
