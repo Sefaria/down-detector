@@ -23,11 +23,6 @@ logger = logging.getLogger(__name__)
 SEFARIA_USER_AGENT = "Sefaria/down-detector"
 
 
-def _http_client() -> httpx.Client:
-    """An httpx client that identifies the monitor to the services it checks."""
-    return httpx.Client(headers={"User-Agent": SEFARIA_USER_AGENT})
-
-
 @dataclass
 class HealthCheckResult:
     """Result of a health check.
@@ -211,7 +206,7 @@ def _check_async_two_phase(config: dict[str, Any]) -> HealthCheckResult:
 
     try:
         # ── Phase 1: Submit task ──────────────────────────────────
-        with _http_client() as client:
+        with httpx.Client(headers={"User-Agent": SEFARIA_USER_AGENT}) as client:
             response = _make_request(
                 client=client,
                 method="POST",
@@ -256,7 +251,7 @@ def _check_async_two_phase(config: dict[str, Any]) -> HealthCheckResult:
         # ── Phase 2: Poll for task completion ─────────────────────
         async_url = f"{async_base_url}{task_id}"
 
-        with _http_client() as client:
+        with httpx.Client(headers={"User-Agent": SEFARIA_USER_AGENT}) as client:
             for attempt in range(max_poll_attempts):
                 time.sleep(poll_interval)
 
@@ -397,7 +392,7 @@ def _check_with_retry(
 
     for attempt in range(max_retries):
         try:
-            with _http_client() as client:
+            with httpx.Client(headers={"User-Agent": SEFARIA_USER_AGENT}) as client:
                 response = _make_request(
                     client=client,
                     method=method,
